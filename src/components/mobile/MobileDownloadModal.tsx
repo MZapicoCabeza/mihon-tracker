@@ -8,7 +8,7 @@ interface MobileDownloadModalProps {
 
 export const MobileDownloadModal: React.FC<MobileDownloadModalProps> = ({ isOpen, onClose }) => {
   const [copiedIp, setCopiedIp] = useState(false);
-  const mobileUrl = 'http://192.168.1.18:3000';
+  const mobileUrl = 'https://mihon-tracker.onrender.com';
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
     mobileUrl
   )}&color=c084fc&bgcolor=140f26&qzone=1`;

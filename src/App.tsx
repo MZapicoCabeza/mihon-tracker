@@ -18,11 +18,17 @@ export const App: React.FC = () => {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Poll /api/events to automatically reflect any chapter read on the mobile phone over Wi-Fi
+  // Cloud API Endpoint (Render 24/7)
+  const API_ENDPOINT =
+    typeof window !== 'undefined' && window.location.hostname === 'mihon-tracker.onrender.com'
+      ? ''
+      : 'https://mihon-tracker.onrender.com';
+
+  // Poll /api/events to automatically reflect any chapter read on the mobile phone via 24/7 cloud API
   React.useEffect(() => {
     const checkServerEvents = async () => {
       try {
-        const res = await fetch('/api/events');
+        const res = await fetch(`${API_ENDPOINT}/api/events`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data?.events) && data.events.length > 0) {
@@ -30,7 +36,7 @@ export const App: React.FC = () => {
             setRecentEvents((prev) => {
               if (prev.some((e) => e.id === latest.id)) return prev;
               applyEvent(latest);
-              showToast(`📱 Mihon (Móvil Wi-Fi): ${latest.manga_title} Cap. ${latest.chapter_number}`);
+              showToast(`📱 Mihon Sync (Cloud): ${latest.manga_title} Cap. ${latest.chapter_number}`);
               return [latest, ...prev];
             });
           }
@@ -42,7 +48,7 @@ export const App: React.FC = () => {
 
     const timer = setInterval(checkServerEvents, 2500);
     return () => clearInterval(timer);
-  }, []);
+  }, [API_ENDPOINT]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -143,7 +149,7 @@ export const App: React.FC = () => {
 
     // Dispatch real POST to API
     try {
-      await fetch('/api/track', {
+      await fetch(`${API_ENDPOINT}/api/track`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

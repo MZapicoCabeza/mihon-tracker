@@ -91,7 +91,7 @@ export const WebhookModal: React.FC<WebhookModalProps> = ({
               </span>
             </div>
             <code className="text-[11px] font-mono text-purple-300 break-all select-all">
-              POST http://10.0.2.2:3000/api/track
+              POST https://mihon-tracker.onrender.com/api/track
             </code>
           </div>
 
