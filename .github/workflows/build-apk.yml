@@ -27,6 +27,14 @@ jobs:
       - name: Install Node Dependencies
         run: npm ci || npm install
 
+      - name: Run Backend Tests
+        run: npm test
+
+      - name: Build Web Assets & Sync Capacitor
+        run: |
+          npm run build
+          npx cap sync android
+
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:

@@ -1,18 +1,18 @@
 import React from 'react';
-import { Home, BookOpen, BarChart3, Radio } from 'lucide-react';
+import { Home, BookOpen, BarChart3, Settings2 } from 'lucide-react';
 
 export type TabType = 'dashboard' | 'library' | 'stats';
 
 interface BottomNavigationProps {
   currentTab: TabType;
   onTabChange: (tab: TabType) => void;
-  onOpenWebhookModal: () => void;
+  onOpenSyncModal: () => void;
 }
 
 export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   currentTab,
   onTabChange,
-  onOpenWebhookModal,
+  onOpenSyncModal,
 }) => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 max-w-md mx-auto px-4 pb-5 pt-2">
@@ -62,13 +62,13 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
           )}
         </button>
 
-        {/* Sync Webhook Button */}
+        {/* Sincronización y Ajustes */}
         <button
-          onClick={onOpenWebhookModal}
-          title="Simulador de Webhook Mihon"
+          onClick={onOpenSyncModal}
+          title="Sincronización & Ajustes de Servidor"
           className="flex items-center justify-center p-2 rounded-full text-[#2D2926] hover:bg-[#F2BC50] transition-colors relative"
         >
-          <Radio className="w-5 h-5 stroke-[2.2]" />
+          <Settings2 className="w-5 h-5 stroke-[2.2]" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#52796F] rounded-full border border-[#FAF7F2]" />
         </button>
       </div>

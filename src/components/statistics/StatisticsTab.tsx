@@ -127,34 +127,43 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({ stats }) => {
           </div>
         </div>
 
-        <div className="mt-2">
-          <GenreDonutChart data={stats.genreDistribution} />
-        </div>
+        {stats.genreDistribution.length === 0 ? (
+          <div className="py-8 text-center text-xs text-[#7A746E]">
+            <p className="font-black text-[#242220]">Sin datos de géneros aún</p>
+            <p className="mt-1 text-[11px]">Lee capítulos en Mihon para desbloquear el gráfico de géneros.</p>
+          </div>
+        ) : (
+          <>
+            <div className="mt-2">
+              <GenreDonutChart data={stats.genreDistribution} />
+            </div>
 
-        {/* Legend Chips in Soft Pastels */}
-        <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t-[1.5px] border-[#F0EBE1]">
-          {stats.genreDistribution.map((item, idx) => {
-            const pastelColors = ['#97CAA8', '#F6A596', '#C8B6E2', '#F8C866', '#B5E2FA'];
-            const chipBg = pastelColors[idx % pastelColors.length];
-            return (
-              <div
-                key={item.genre}
-                className="flex items-center justify-between p-2 rounded-xl border-[1.5px] border-[#2D2926] bg-[#FAF7F2]"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="w-3 h-3 rounded-full border border-[#2D2926] flex-shrink-0"
-                    style={{ backgroundColor: chipBg }}
-                  />
-                  <span className="text-xs font-black text-[#242220] truncate">{item.genre}</span>
-                </div>
-                <span className="text-xs font-black font-mono text-[#242220] ml-1">
-                  {item.percentage}%
-                </span>
-              </div>
-            );
-          })}
-        </div>
+            {/* Legend Chips in Soft Pastels */}
+            <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t-[1.5px] border-[#F0EBE1]">
+              {stats.genreDistribution.map((item, idx) => {
+                const pastelColors = ['#97CAA8', '#F6A596', '#C8B6E2', '#F8C866', '#B5E2FA'];
+                const chipBg = pastelColors[idx % pastelColors.length];
+                return (
+                  <div
+                    key={item.genre}
+                    className="flex items-center justify-between p-2 rounded-xl border-[1.5px] border-[#2D2926] bg-[#FAF7F2]"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-3 h-3 rounded-full border border-[#2D2926] flex-shrink-0"
+                        style={{ backgroundColor: chipBg }}
+                      />
+                      <span className="text-xs font-black text-[#242220] truncate">{item.genre}</span>
+                    </div>
+                    <span className="text-xs font-black font-mono text-[#242220] ml-1">
+                      {item.percentage}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -271,7 +271,15 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       {/* Manga Cards List / Grouped View */}
       {filteredMangas.length === 0 ? (
         <div className="text-center py-12 rounded-3xl bg-white border-[1.8px] border-[#2D2926] p-6 shadow-[0_4px_0px_#2D2926]">
-          <p className="text-sm font-bold text-[#7A746E]">No se encontraron mangas con ese criterio.</p>
+          <span className="text-3xl">📚</span>
+          <p className="text-sm font-black text-[#242220] mt-2">
+            {mangas.length === 0 ? 'Biblioteca vacía' : 'Sin resultados'}
+          </p>
+          <p className="text-xs text-[#7A746E] mt-1 max-w-xs mx-auto">
+            {mangas.length === 0
+              ? 'Aún no has sincronizado tu biblioteca. Importa un respaldo o sincroniza desde Mihon.'
+              : 'No se encontraron mangas con los filtros o término de búsqueda actual.'}
+          </p>
         </div>
       ) : groupByCategory && groupedData ? (
         <div className="space-y-6">
