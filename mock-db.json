@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "manga_id": "12345",
+      "manga_title": "One Piece",
+      "chapter_number": 1116,
+      "cover_url": "",
+      "timestamp": "2026-10-21T21:05:00Z",
+      "genres": [
+        "Shonen"
+      ],
+      "id": "evt-1792616778804",
+      "received_at": "2026-10-21T21:06:18.804Z"
+    }
+  ]
+}

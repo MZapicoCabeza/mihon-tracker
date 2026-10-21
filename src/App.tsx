@@ -18,6 +18,32 @@ export const App: React.FC = () => {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Poll /api/events to automatically reflect any chapter read on the mobile phone over Wi-Fi
+  React.useEffect(() => {
+    const checkServerEvents = async () => {
+      try {
+        const res = await fetch('/api/events');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data?.events) && data.events.length > 0) {
+            const latest = data.events[0];
+            setRecentEvents((prev) => {
+              if (prev.some((e) => e.id === latest.id)) return prev;
+              applyEvent(latest);
+              showToast(`📱 Mihon (Móvil Wi-Fi): ${latest.manga_title} Cap. ${latest.chapter_number}`);
+              return [latest, ...prev];
+            });
+          }
+        }
+      } catch (err) {
+        // Server might be compiling or offline
+      }
+    };
+
+    const timer = setInterval(checkServerEvents, 2500);
+    return () => clearInterval(timer);
+  }, []);
+
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => {
@@ -41,8 +67,60 @@ export const App: React.FC = () => {
     setCurrentTab('library');
   };
 
+  const applyEvent = (payload: {
+    manga_id: string;
+    manga_title: string;
+    chapter_number: number;
+    cover_url: string;
+    timestamp: string;
+    genres: string[];
+  }) => {
+    // 1. Update manga progress
+    setMangas((prev) =>
+      prev.map((manga) => {
+        if (manga.id === payload.manga_id) {
+          const isCompleted = payload.chapter_number >= manga.totalChapters;
+          return {
+            ...manga,
+            currentChapter: payload.chapter_number,
+            lastReadAt: payload.timestamp,
+            status: isCompleted ? 'completed' : manga.status,
+          };
+        }
+        return manga;
+      })
+    );
+
+    // 2. Update stats (Total chapters, weekly activity, monthly activity)
+    setStats((prev) => {
+      const newTotal = prev.totalChaptersRead + 1;
+      const newHours = Math.round((newTotal * 10) / 60);
+
+      const updatedWeekly = [...prev.weeklyActivity];
+      const lastIndex = updatedWeekly.length - 1;
+      if (lastIndex >= 0) {
+        updatedWeekly[lastIndex] = {
+          ...updatedWeekly[lastIndex],
+          chapters: updatedWeekly[lastIndex].chapters + 1,
+        };
+      }
+
+      const updatedMonthly = prev.monthlyActivity.map((m) =>
+        m.month === 'Octubre' ? { ...m, chapters: m.chapters + 1 } : m
+      );
+
+      return {
+        ...prev,
+        totalChaptersRead: newTotal,
+        estimatedHoursRead: newHours,
+        weeklyActivity: updatedWeekly,
+        monthlyActivity: updatedMonthly,
+      };
+    });
+  };
+
   // Simulates receiving a chapter completion event from Mihon's CustomTrackerService
-  const handleSimulateWebhook = (payload: {
+  const handleSimulateWebhook = async (payload: {
     manga_id: string;
     manga_title: string;
     chapter_number: number;
@@ -60,53 +138,19 @@ export const App: React.FC = () => {
       genres: payload.genres,
     };
 
-    // 1. Prepend to recent events
     setRecentEvents((prev) => [newEvent, ...prev]);
+    applyEvent(payload);
 
-    // 2. Update manga progress
-    setMangas((prev) =>
-      prev.map((manga) => {
-        if (manga.id === payload.manga_id) {
-          const isCompleted = payload.chapter_number >= manga.totalChapters;
-          return {
-            ...manga,
-            currentChapter: payload.chapter_number,
-            lastReadAt: payload.timestamp,
-            status: isCompleted ? 'completed' : manga.status,
-          };
-        }
-        return manga;
-      })
-    );
-
-    // 3. Update stats (Total chapters, weekly activity, monthly activity)
-    setStats((prev) => {
-      const newTotal = prev.totalChaptersRead + 1;
-      const newHours = Math.round((newTotal * 10) / 60);
-
-      // Update today's weekly count (Sunday / today)
-      const updatedWeekly = [...prev.weeklyActivity];
-      const lastIndex = updatedWeekly.length - 1;
-      if (lastIndex >= 0) {
-        updatedWeekly[lastIndex] = {
-          ...updatedWeekly[lastIndex],
-          chapters: updatedWeekly[lastIndex].chapters + 1,
-        };
-      }
-
-      // Update current month (Octubre)
-      const updatedMonthly = prev.monthlyActivity.map((m) =>
-        m.month === 'Octubre' ? { ...m, chapters: m.chapters + 1 } : m
-      );
-
-      return {
-        ...prev,
-        totalChaptersRead: newTotal,
-        estimatedHoursRead: newHours,
-        weeklyActivity: updatedWeekly,
-        monthlyActivity: updatedMonthly,
-      };
-    });
+    // Dispatch real POST to API
+    try {
+      await fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      // Ignore if offline
+    }
 
     showToast(`¡Mihon Webhook recibido! Leído ${payload.manga_title} Cap. ${payload.chapter_number}`);
   };
