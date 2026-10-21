@@ -4,6 +4,7 @@ import { DashboardTab } from './components/dashboard/DashboardTab';
 import { LibraryTab } from './components/library/LibraryTab';
 import { StatisticsTab } from './components/statistics/StatisticsTab';
 import { WebhookModal } from './components/webhook/WebhookModal';
+import { MobileDownloadModal } from './components/mobile/MobileDownloadModal';
 import { INITIAL_MANGAS, INITIAL_RECENT_EVENTS, INITIAL_STATS } from './data/mockData';
 import { MangaItem, MangaStatus, ReadingHistoryEvent, ReadingStats } from './types/tracker';
 import { Bell, CheckCircle2 } from 'lucide-react';
@@ -14,6 +15,7 @@ export const App: React.FC = () => {
   const [recentEvents, setRecentEvents] = useState<ReadingHistoryEvent[]>(INITIAL_RECENT_EVENTS);
   const [stats, setStats] = useState<ReadingStats>(INITIAL_STATS);
   const [isWebhookModalOpen, setIsWebhookModalOpen] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (message: string) => {
@@ -136,6 +138,7 @@ export const App: React.FC = () => {
               mangas={mangas}
               onSelectManga={handleSelectManga}
               onOpenWebhookModal={() => setIsWebhookModalOpen(true)}
+              onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
             />
           )}
 
@@ -163,6 +166,12 @@ export const App: React.FC = () => {
           onClose={() => setIsWebhookModalOpen(false)}
           mangas={mangas}
           onSimulateWebhook={handleSimulateWebhook}
+        />
+
+        {/* Mobile APK Download & PWA Modal */}
+        <MobileDownloadModal
+          isOpen={isDownloadModalOpen}
+          onClose={() => setIsDownloadModalOpen(false)}
         />
       </div>
     </div>

@@ -10,6 +10,7 @@ interface DashboardTabProps {
   mangas: MangaItem[];
   onSelectManga: (mangaId: string) => void;
   onOpenWebhookModal: () => void;
+  onOpenDownloadModal: () => void;
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
@@ -18,12 +19,13 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   mangas,
   onSelectManga,
   onOpenWebhookModal,
+  onOpenDownloadModal,
 }) => {
   const formattedDate = getCurrentDateFormattedSpanish();
   const greeting = getGreetingSpanish();
 
   return (
-    <div className="space-y-5 pb-24 animate-fadeIn">
+    <div className="space-y-4 pb-24 animate-fadeIn">
       {/* Top Header Card */}
       <div className="flex items-start justify-between pt-1">
         <div>
@@ -44,6 +46,34 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>Mihon Fork Activo</span>
         </button>
+      </div>
+
+      {/* Direct Mobile Download Banner */}
+      <div
+        onClick={onOpenDownloadModal}
+        className="cursor-pointer group flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-purple-950/80 via-purple-900/50 to-indigo-950/80 border border-purple-500/40 hover:border-purple-400 shadow-[0_4px_20px_rgba(168,85,247,0.25)] transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-purple-600/30 text-purple-300 border border-purple-500/40 group-hover:scale-105 transition-transform">
+            <Zap className="w-5 h-5 text-purple-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-white group-hover:text-purple-300 transition-colors">
+                Descargar APK de Mihon al Móvil
+              </span>
+              <span className="text-[10px] bg-emerald-950/80 text-emerald-400 font-bold px-1.5 py-0.2 rounded border border-emerald-800/40">
+                27.7 MB
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-300 mt-0.5">
+              Toca aquí para descargar el APK e instalar en tu teléfono
+            </p>
+          </div>
+        </div>
+        <div className="p-1.5 rounded-xl bg-purple-900/40 text-purple-300 group-hover:translate-x-1 transition-transform">
+          <ChevronRight className="w-4 h-4" />
+        </div>
       </div>
 
       {/* Streak & Quick Metric Widget */}
