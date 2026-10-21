@@ -209,7 +209,7 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
                   <span>{isImporting ? 'Importando respaldo...' : 'Seleccionar archivo .tachibk / .json'}</span>
                   <input
                     type="file"
-                    accept=".tachibk,.json,application/json"
+                    accept="*/*"
                     onChange={handleFileUpload}
                     disabled={isImporting}
                     className="hidden"
