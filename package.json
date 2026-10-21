@@ -11,6 +11,9 @@
     "server": "node server.js",
     "test": "node --test tests/backend.test.js"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "devDependencies": {
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

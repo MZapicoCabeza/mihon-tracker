@@ -1,0 +1,37 @@
+{
+  "mangas": {
+    "99": {
+      "id": "99",
+      "title": "Fallback Test",
+      "coverUrl": "",
+      "currentChapter": 1,
+      "totalChapters": 0,
+      "status": "reading",
+      "isFavorite": false,
+      "genres": [],
+      "author": "",
+      "artist": "",
+      "source": "",
+      "rating": 0,
+      "lastReadAt": "2026-10-21T22:33:29.536Z",
+      "createdAt": "2026-10-21T22:33:29.536Z",
+      "updatedAt": "2026-10-21T22:33:29.536Z"
+    }
+  },
+  "events": [
+    {
+      "id": "evt_99_1_1792622009536",
+      "manga_id": "99",
+      "manga_title": "Fallback Test",
+      "chapter_number": 1,
+      "chapter_id": "",
+      "cover_url": "",
+      "genres": [],
+      "timestamp": "2026-10-21T22:33:29.536Z",
+      "received_at": "2026-10-21T22:33:29.536Z",
+      "source": "mihon",
+      "event_hash": "c8007cde66ea24982997acfa05b8b9dab3b82588331f7e7f43d159ce20057720"
+    }
+  ],
+  "meta": {}
+}

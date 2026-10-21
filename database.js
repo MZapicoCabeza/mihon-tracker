@@ -1,13 +1,21 @@
-import { DatabaseSync } from 'node:sqlite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
+let DatabaseSync = null;
+try {
+  const sqlite = await import('node:sqlite');
+  DatabaseSync = sqlite.DatabaseSync;
+} catch (e) {
+  console.warn('⚠️ [DB NOTICE] Native node:sqlite not available on this Node version. Using persistent JSON storage engine.');
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DB_FILE = process.env.DATABASE_PATH || process.env.DB_FILE || path.join(__dirname, 'tracker.db');
+const JSON_FALLBACK_FILE = path.join(__dirname, 'tracker-fallback.json');
 const MOCK_DB_FILE = path.join(__dirname, 'mock-db.json');
 
 // Ensure directory exists
@@ -19,10 +27,20 @@ if (!fs.existsSync(dbDir)) {
 export class TrackerDatabase {
   constructor(dbPath = DB_FILE) {
     this.dbPath = dbPath;
-    this.db = new DatabaseSync(dbPath);
-    this.initSchema();
-    this.migrateFromMockDbIfNeeded();
+    this.isSqlite = Boolean(DatabaseSync && dbPath !== ':fallback:');
+    
+    if (this.isSqlite) {
+      this.db = new DatabaseSync(dbPath);
+      this.initSchema();
+      this.migrateFromMockDbIfNeeded();
+    } else {
+      this.fallbackPath = dbPath === ':memory:' ? null : JSON_FALLBACK_FILE;
+      this.memStore = { mangas: {}, events: [], meta: {} };
+      this.loadFallback();
+    }
   }
+
+  // --- SQLITE ENGINE ---
 
   initSchema() {
     this.db.exec(`
@@ -99,9 +117,31 @@ export class TrackerDatabase {
     }
   }
 
+  // --- FALLBACK JSON ENGINE (When Node < 22.5) ---
+
+  loadFallback() {
+    if (this.fallbackPath && fs.existsSync(this.fallbackPath)) {
+      try {
+        const raw = fs.readFileSync(this.fallbackPath, 'utf-8');
+        this.memStore = JSON.parse(raw);
+      } catch (e) {
+        this.memStore = { mangas: {}, events: [], meta: {} };
+      }
+    }
+  }
+
+  saveFallback() {
+    if (this.fallbackPath) {
+      try {
+        fs.writeFileSync(this.fallbackPath, JSON.stringify(this.memStore, null, 2));
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
   // Generate stable deterministic hash for deduplication
   generateEventHash(mangaId, chapterNumber, timestamp) {
-    // Normalise timestamp to date or ISO minute to avoid accidental double-taps
     const dateStr = timestamp ? new Date(timestamp).toISOString().slice(0, 16) : '';
     return crypto
       .createHash('sha256')
@@ -112,32 +152,51 @@ export class TrackerDatabase {
   // --- MANGAS / LIBRARY ---
 
   getAllMangas({ status, isFavorite, search } = {}) {
-    let sql = 'SELECT * FROM mangas WHERE 1=1';
-    const params = [];
+    if (this.isSqlite) {
+      let sql = 'SELECT * FROM mangas WHERE 1=1';
+      const params = [];
 
-    if (status && status !== 'all') {
-      sql += ' AND status = ?';
-      params.push(status);
-    }
-    if (isFavorite !== undefined && isFavorite !== null) {
-      sql += ' AND is_favorite = ?';
-      params.push(isFavorite ? 1 : 0);
-    }
-    if (search && search.trim()) {
-      sql += ' AND (title LIKE ? OR author LIKE ?)';
-      const term = `%${search.trim()}%`;
-      params.push(term, term);
-    }
+      if (status && status !== 'all') {
+        sql += ' AND status = ?';
+        params.push(status);
+      }
+      if (isFavorite !== undefined && isFavorite !== null) {
+        sql += ' AND is_favorite = ?';
+        params.push(isFavorite ? 1 : 0);
+      }
+      if (search && search.trim()) {
+        sql += ' AND (title LIKE ? OR author LIKE ?)';
+        const term = `%${search.trim()}%`;
+        params.push(term, term);
+      }
 
-    sql += " ORDER BY CASE WHEN last_read_at != '' THEN last_read_at ELSE updated_at END DESC";
-
-    const rows = this.db.prepare(sql).all(...params);
-    return rows.map(r => this._formatMangaRow(r));
+      sql += " ORDER BY CASE WHEN last_read_at != '' THEN last_read_at ELSE updated_at END DESC";
+      const rows = this.db.prepare(sql).all(...params);
+      return rows.map(r => this._formatMangaRow(r));
+    } else {
+      let list = Object.values(this.memStore.mangas);
+      if (status && status !== 'all') {
+        list = list.filter(m => m.status === status);
+      }
+      if (isFavorite !== undefined && isFavorite !== null) {
+        list = list.filter(m => m.isFavorite === Boolean(isFavorite));
+      }
+      if (search && search.trim()) {
+        const s = search.toLowerCase();
+        list = list.filter(m => m.title.toLowerCase().includes(s) || (m.author && m.author.toLowerCase().includes(s)));
+      }
+      list.sort((a, b) => (b.lastReadAt || b.updatedAt || '').localeCompare(a.lastReadAt || a.updatedAt || ''));
+      return list;
+    }
   }
 
   getMangaById(id) {
-    const row = this.db.prepare('SELECT * FROM mangas WHERE id = ?').get(id.toString());
-    return row ? this._formatMangaRow(row) : null;
+    if (this.isSqlite) {
+      const row = this.db.prepare('SELECT * FROM mangas WHERE id = ?').get(id.toString());
+      return row ? this._formatMangaRow(row) : null;
+    } else {
+      return this.memStore.mangas[id.toString()] || null;
+    }
   }
 
   upsertManga(manga) {
@@ -149,73 +208,96 @@ export class TrackerDatabase {
     const coverUrl = manga.coverUrl || manga.cover_url || (existing ? existing.coverUrl : '');
     const currentChapter = Number(manga.currentChapter ?? manga.current_chapter ?? (existing ? existing.currentChapter : 0));
     const totalChapters = Number(manga.totalChapters ?? manga.total_chapters ?? (existing ? existing.totalChapters : 0));
-    const genres = JSON.stringify(manga.genres || (existing ? existing.genres : []));
+    const genres = Array.isArray(manga.genres) ? manga.genres : (existing ? existing.genres : []);
     const author = manga.author || (existing ? existing.author : '');
     const artist = manga.artist || (existing ? existing.artist : '');
     const source = manga.source || (existing ? existing.source : '');
+    
     const isFavorite = (manga.isFavorite !== undefined ? manga.isFavorite : manga.is_favorite) !== undefined
-      ? ((manga.isFavorite || manga.is_favorite) ? 1 : 0)
-      : (existing ? (existing.isFavorite ? 1 : 0) : 0);
+      ? Boolean(manga.isFavorite || manga.is_favorite)
+      : (existing ? existing.isFavorite : false);
+
     const rating = Number(manga.rating ?? (existing ? existing.rating : 0));
     const lastReadAt = manga.lastReadAt || manga.last_read_at || (existing ? existing.lastReadAt : '');
     
-    // Auto status determination if not specified
     let status = manga.status || (existing ? existing.status : 'reading');
     if (totalChapters > 0 && currentChapter >= totalChapters) {
       status = 'completed';
     }
 
-    if (existing) {
-      const stmt = this.db.prepare(`
-        UPDATE mangas SET
-          title = ?,
-          cover_url = ?,
-          current_chapter = MAX(current_chapter, ?),
-          total_chapters = CASE WHEN ? > 0 THEN ? ELSE total_chapters END,
-          status = ?,
-          is_favorite = ?,
-          genres = ?,
-          author = ?,
-          artist = ?,
-          source = ?,
-          rating = ?,
-          last_read_at = CASE WHEN ? != '' THEN ? ELSE last_read_at END,
-          updated_at = ?
-        WHERE id = ?
-      `);
-      stmt.run(
-        title,
-        coverUrl,
-        currentChapter,
-        totalChapters,
-        totalChapters,
-        status,
-        isFavorite,
-        genres,
-        author,
-        artist,
-        source,
-        rating,
-        lastReadAt,
-        lastReadAt,
-        now,
-        id
-      );
-      return { id, isNew: false };
+    if (this.isSqlite) {
+      if (existing) {
+        const stmt = this.db.prepare(`
+          UPDATE mangas SET
+            title = ?,
+            cover_url = ?,
+            current_chapter = MAX(current_chapter, ?),
+            total_chapters = CASE WHEN ? > 0 THEN ? ELSE total_chapters END,
+            status = ?,
+            is_favorite = ?,
+            genres = ?,
+            author = ?,
+            artist = ?,
+            source = ?,
+            rating = ?,
+            last_read_at = CASE WHEN ? != '' THEN ? ELSE last_read_at END,
+            updated_at = ?
+          WHERE id = ?
+        `);
+        stmt.run(
+          title,
+          coverUrl,
+          currentChapter,
+          totalChapters,
+          totalChapters,
+          status,
+          isFavorite ? 1 : 0,
+          JSON.stringify(genres),
+          author,
+          artist,
+          source,
+          rating,
+          lastReadAt,
+          lastReadAt,
+          now,
+          id
+        );
+        return { id, isNew: false };
+      } else {
+        const stmt = this.db.prepare(`
+          INSERT INTO mangas (
+            id, title, cover_url, current_chapter, total_chapters,
+            status, is_favorite, genres, author, artist, source, rating,
+            last_read_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        stmt.run(
+          id,
+          title,
+          coverUrl,
+          currentChapter,
+          totalChapters,
+          status,
+          isFavorite ? 1 : 0,
+          JSON.stringify(genres),
+          author,
+          artist,
+          source,
+          rating,
+          lastReadAt,
+          now,
+          now
+        );
+        return { id, isNew: true };
+      }
     } else {
-      const stmt = this.db.prepare(`
-        INSERT INTO mangas (
-          id, title, cover_url, current_chapter, total_chapters,
-          status, is_favorite, genres, author, artist, source, rating,
-          last_read_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      stmt.run(
+      const isNew = !existing;
+      this.memStore.mangas[id] = {
         id,
         title,
         coverUrl,
-        currentChapter,
-        totalChapters,
+        currentChapter: Math.max(currentChapter, existing ? existing.currentChapter : 0),
+        totalChapters: totalChapters > 0 ? totalChapters : (existing ? existing.totalChapters : 0),
         status,
         isFavorite,
         genres,
@@ -223,11 +305,12 @@ export class TrackerDatabase {
         artist,
         source,
         rating,
-        lastReadAt,
-        now,
-        now
-      );
-      return { id, isNew: true };
+        lastReadAt: lastReadAt || (existing ? existing.lastReadAt : ''),
+        createdAt: existing ? existing.createdAt : now,
+        updatedAt: now,
+      };
+      this.saveFallback();
+      return { id, isNew };
     }
   }
 
@@ -239,19 +322,28 @@ export class TrackerDatabase {
     let inserted = 0;
     let updated = 0;
 
-    // Use transaction for bulk operations
-    this.db.exec('BEGIN TRANSACTION');
-    try {
+    if (this.isSqlite) {
+      this.db.exec('BEGIN TRANSACTION');
+      try {
+        for (const item of mangasArray) {
+          if (!item.id || !item.title) continue;
+          const res = this.upsertManga(item);
+          if (res.isNew) inserted++;
+          else updated++;
+        }
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw err;
+      }
+    } else {
       for (const item of mangasArray) {
         if (!item.id || !item.title) continue;
         const res = this.upsertManga(item);
         if (res.isNew) inserted++;
         else updated++;
       }
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
+      this.saveFallback();
     }
 
     this.setMeta('last_library_sync', new Date().toISOString());
@@ -259,15 +351,35 @@ export class TrackerDatabase {
   }
 
   updateMangaFavorite(id, isFavorite) {
-    const stmt = this.db.prepare('UPDATE mangas SET is_favorite = ?, updated_at = ? WHERE id = ?');
-    stmt.run(isFavorite ? 1 : 0, new Date().toISOString(), id.toString());
-    return this.getMangaById(id);
+    if (this.isSqlite) {
+      const stmt = this.db.prepare('UPDATE mangas SET is_favorite = ?, updated_at = ? WHERE id = ?');
+      stmt.run(isFavorite ? 1 : 0, new Date().toISOString(), id.toString());
+      return this.getMangaById(id);
+    } else {
+      const manga = this.getMangaById(id);
+      if (manga) {
+        manga.isFavorite = Boolean(isFavorite);
+        manga.updatedAt = new Date().toISOString();
+        this.saveFallback();
+      }
+      return manga;
+    }
   }
 
   updateMangaStatus(id, status) {
-    const stmt = this.db.prepare('UPDATE mangas SET status = ?, updated_at = ? WHERE id = ?');
-    stmt.run(status, new Date().toISOString(), id.toString());
-    return this.getMangaById(id);
+    if (this.isSqlite) {
+      const stmt = this.db.prepare('UPDATE mangas SET status = ?, updated_at = ? WHERE id = ?');
+      stmt.run(status, new Date().toISOString(), id.toString());
+      return this.getMangaById(id);
+    } else {
+      const manga = this.getMangaById(id);
+      if (manga) {
+        manga.status = status;
+        manga.updatedAt = new Date().toISOString();
+        this.saveFallback();
+      }
+      return manga;
+    }
   }
 
   // --- READING EVENTS & TRACKING ---
@@ -291,119 +403,162 @@ export class TrackerDatabase {
     const eventHash = eventData.event_hash || this.generateEventHash(mangaId, chapterNum, timestamp);
     const id = eventData.id || `evt_${mangaId}_${chapterNum}_${Date.now()}`;
 
-    // Deduplication check
-    const existing = this.db.prepare('SELECT * FROM reading_events WHERE event_hash = ?').get(eventHash);
-    if (existing) {
+    if (this.isSqlite) {
+      // Deduplication check
+      const existing = this.db.prepare('SELECT * FROM reading_events WHERE event_hash = ?').get(eventHash);
+      if (existing) {
+        return {
+          isDuplicate: true,
+          event: this._formatEventRow(existing),
+        };
+      }
+
+      const genres = JSON.stringify(Array.isArray(eventData.genres) ? eventData.genres : []);
+      const coverUrl = eventData.cover_url || '';
+      const chapterId = eventData.chapter_id ? eventData.chapter_id.toString() : '';
+      const source = eventData.source || 'mihon';
+
+      const insertStmt = this.db.prepare(`
+        INSERT INTO reading_events (
+          id, manga_id, manga_title, chapter_number, chapter_id,
+          cover_url, genres, timestamp, received_at, source, event_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      insertStmt.run(
+        id,
+        mangaId,
+        eventData.manga_title,
+        chapterNum,
+        chapterId,
+        coverUrl,
+        genres,
+        timestamp,
+        receivedAt,
+        source,
+        eventHash
+      );
+
+      this.upsertManga({
+        id: mangaId,
+        title: eventData.manga_title,
+        coverUrl: coverUrl,
+        currentChapter: chapterNum,
+        genres: Array.isArray(eventData.genres) ? eventData.genres : [],
+        lastReadAt: timestamp,
+      });
+
       return {
-        isDuplicate: true,
-        event: this._formatEventRow(existing),
+        isDuplicate: false,
+        event: this.getEventById(id),
       };
+    } else {
+      const existing = this.memStore.events.find(e => e.event_hash === eventHash);
+      if (existing) {
+        return { isDuplicate: true, event: existing };
+      }
+
+      const newEvent = {
+        id,
+        manga_id: mangaId,
+        manga_title: eventData.manga_title,
+        chapter_number: chapterNum,
+        chapter_id: eventData.chapter_id ? eventData.chapter_id.toString() : '',
+        cover_url: eventData.cover_url || '',
+        genres: Array.isArray(eventData.genres) ? eventData.genres : [],
+        timestamp,
+        received_at: receivedAt,
+        source: eventData.source || 'mihon',
+        event_hash: eventHash,
+      };
+
+      this.memStore.events.unshift(newEvent);
+      this.upsertManga({
+        id: mangaId,
+        title: eventData.manga_title,
+        coverUrl: eventData.cover_url || '',
+        currentChapter: chapterNum,
+        genres: Array.isArray(eventData.genres) ? eventData.genres : [],
+        lastReadAt: timestamp,
+      });
+
+      this.saveFallback();
+      return { isDuplicate: false, event: newEvent };
     }
-
-    const genres = JSON.stringify(Array.isArray(eventData.genres) ? eventData.genres : []);
-    const coverUrl = eventData.cover_url || '';
-    const chapterId = eventData.chapter_id ? eventData.chapter_id.toString() : '';
-    const source = eventData.source || 'mihon';
-
-    // Insert event
-    const insertStmt = this.db.prepare(`
-      INSERT INTO reading_events (
-        id, manga_id, manga_title, chapter_number, chapter_id,
-        cover_url, genres, timestamp, received_at, source, event_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    insertStmt.run(
-      id,
-      mangaId,
-      eventData.manga_title,
-      chapterNum,
-      chapterId,
-      coverUrl,
-      genres,
-      timestamp,
-      receivedAt,
-      source,
-      eventHash
-    );
-
-    // Update or insert manga
-    this.upsertManga({
-      id: mangaId,
-      title: eventData.manga_title,
-      coverUrl: coverUrl,
-      currentChapter: chapterNum,
-      genres: Array.isArray(eventData.genres) ? eventData.genres : [],
-      lastReadAt: timestamp,
-    });
-
-    const newEvent = this.getEventById(id);
-    return {
-      isDuplicate: false,
-      event: newEvent,
-    };
   }
 
   getEventById(id) {
-    const row = this.db.prepare('SELECT * FROM reading_events WHERE id = ?').get(id);
-    return row ? this._formatEventRow(row) : null;
+    if (this.isSqlite) {
+      const row = this.db.prepare('SELECT * FROM reading_events WHERE id = ?').get(id);
+      return row ? this._formatEventRow(row) : null;
+    } else {
+      return this.memStore.events.find(e => e.id === id) || null;
+    }
   }
 
   getReadingEvents({ limit = 50, offset = 0, since, sinceId } = {}) {
-    let sql = 'SELECT * FROM reading_events WHERE 1=1';
-    const params = [];
+    if (this.isSqlite) {
+      let sql = 'SELECT * FROM reading_events WHERE 1=1';
+      const params = [];
 
-    if (since) {
-      sql += ' AND timestamp > ?';
-      params.push(since);
+      if (since) {
+        sql += ' AND timestamp > ?';
+        params.push(since);
+      }
+      if (sinceId) {
+        sql += ' AND id != ?';
+        params.push(sinceId);
+      }
+
+      sql += ' ORDER BY timestamp DESC, received_at DESC LIMIT ? OFFSET ?';
+      params.push(Math.min(limit, 200), offset);
+
+      const rows = this.db.prepare(sql).all(...params);
+      const totalCount = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
+
+      return {
+        events: rows.map(r => this._formatEventRow(r)),
+        total: totalCount,
+        hasMore: offset + rows.length < totalCount,
+      };
+    } else {
+      let list = [...this.memStore.events];
+      if (since) {
+        list = list.filter(e => e.timestamp > since);
+      }
+      if (sinceId) {
+        list = list.filter(e => e.id !== sinceId);
+      }
+      list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      const total = list.length;
+      const paginated = list.slice(offset, offset + limit);
+      return { events: paginated, total, hasMore: offset + paginated.length < total };
     }
-    if (sinceId) {
-      sql += ' AND id != ?';
-      params.push(sinceId);
-    }
-
-    sql += ' ORDER BY timestamp DESC, received_at DESC LIMIT ? OFFSET ?';
-    params.push(Math.min(limit, 200), offset);
-
-    const rows = this.db.prepare(sql).all(...params);
-    const totalCount = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
-
-    return {
-      events: rows.map(r => this._formatEventRow(r)),
-      total: totalCount,
-      hasMore: offset + rows.length < totalCount,
-    };
   }
 
-  // --- STATS CALCULATION (REAL DATA) ---
+  // --- STATS CALCULATION ---
 
   calculateStats() {
-    const totalEvents = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
-    const totalMangas = this.db.prepare('SELECT COUNT(*) as c FROM mangas').get().c;
-    const completedMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'completed'").get().c;
-    const readingMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'reading'").get().c;
+    let totalEvents = 0;
+    let totalMangas = 0;
+    let completedMangas = 0;
+    let readingMangas = 0;
 
-    // Distinct read chapters count or total event count
+    if (this.isSqlite) {
+      totalEvents = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
+      totalMangas = this.db.prepare('SELECT COUNT(*) as c FROM mangas').get().c;
+      completedMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'completed'").get().c;
+      readingMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'reading'").get().c;
+    } else {
+      totalEvents = this.memStore.events.length;
+      const mangas = Object.values(this.memStore.mangas);
+      totalMangas = mangas.length;
+      completedMangas = mangas.filter(m => m.status === 'completed').length;
+      readingMangas = mangas.filter(m => m.status === 'reading').length;
+    }
+
     const totalChaptersRead = totalEvents;
     const estimatedHoursRead = Math.round((totalChaptersRead * 10) / 60);
-
-    // Streak calculation
-    const currentStreakDays = this._calculateCurrentStreak();
-
-    // Weekly activity (last 7 days from today)
-    const weeklyActivity = this._calculateWeeklyActivity();
-
-    // Monthly activity (last 6 months)
-    const monthlyActivity = this._calculateMonthlyActivity();
-
-    // Genre distribution
-    const genreDistribution = this._calculateGenreDistribution();
-
-    // Most active day & average
-    const { mostActiveDay, mostActiveDayAvg } = this._calculateMostActiveDay();
-
-    // Favorite reading time (Mañana, Tarde, Noche, Madrugada)
-    const favoriteReadingTime = this._calculateFavoriteReadingTime();
 
     return {
       totalChaptersRead,
@@ -411,31 +566,33 @@ export class TrackerDatabase {
       totalMangaCompleted: completedMangas,
       totalMangaReading: readingMangas,
       totalMangaInLibrary: totalMangas,
-      currentStreakDays,
-      mostActiveDay,
-      mostActiveDayAvg,
-      favoriteReadingTime,
-      weeklyActivity,
-      monthlyActivity,
-      genreDistribution,
+      currentStreakDays: this._calculateCurrentStreak(),
+      mostActiveDay: this._calculateMostActiveDay().mostActiveDay,
+      mostActiveDayAvg: this._calculateMostActiveDay().mostActiveDayAvg,
+      favoriteReadingTime: this._calculateFavoriteReadingTime(),
+      weeklyActivity: this._calculateWeeklyActivity(),
+      monthlyActivity: this._calculateMonthlyActivity(),
+      genreDistribution: this._calculateGenreDistribution(),
       lastSyncAt: this.getMeta('last_library_sync') || null,
     };
   }
 
   _calculateCurrentStreak() {
-    // Get distinct reading dates in UTC YYYY-MM-DD
-    const rows = this.db.prepare(`
-      SELECT DISTINCT substr(timestamp, 1, 10) as read_date
-      FROM reading_events
-      ORDER BY read_date DESC
-    `).all();
+    let readDates = new Set();
+    if (this.isSqlite) {
+      const rows = this.db.prepare(`
+        SELECT DISTINCT substr(timestamp, 1, 10) as read_date
+        FROM reading_events
+        ORDER BY read_date DESC
+      `).all();
+      readDates = new Set(rows.map(r => r.read_date));
+    } else {
+      readDates = new Set(this.memStore.events.map(e => e.timestamp.slice(0, 10)));
+    }
 
-    if (rows.length === 0) return 0;
+    if (readDates.size === 0) return 0;
 
-    const readDates = new Set(rows.map(r => r.read_date));
     const now = new Date();
-    
-    // Format YYYY-MM-DD in local/UTC
     const formatDate = d => d.toISOString().slice(0, 10);
 
     const todayStr = formatDate(now);
@@ -446,7 +603,6 @@ export class TrackerDatabase {
     let streak = 0;
     let checkDate = new Date(now);
 
-    // If no read today, check if yesterday was read. If neither, streak is 0.
     if (!readDates.has(todayStr)) {
       if (!readDates.has(yesterdayStr)) {
         return 0;
@@ -469,23 +625,28 @@ export class TrackerDatabase {
     const result = [];
     const now = new Date();
 
-    // Last 7 days in chronological order
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().slice(0, 10);
       const dayIndex = d.getDay();
 
-      const countRow = this.db.prepare(`
-        SELECT COUNT(*) as c
-        FROM reading_events
-        WHERE substr(timestamp, 1, 10) = ?
-      `).get(dateStr);
+      let count = 0;
+      if (this.isSqlite) {
+        const countRow = this.db.prepare(`
+          SELECT COUNT(*) as c
+          FROM reading_events
+          WHERE substr(timestamp, 1, 10) = ?
+        `).get(dateStr);
+        count = countRow ? countRow.c : 0;
+      } else {
+        count = this.memStore.events.filter(e => e.timestamp.startsWith(dateStr)).length;
+      }
 
       result.push({
         day: fullDaysSpanish[dayIndex],
         shortDay: daysSpanish[dayIndex],
-        chapters: countRow ? countRow.c : 0,
+        chapters: count,
         date: dateStr,
       });
     }
@@ -503,22 +664,27 @@ export class TrackerDatabase {
     const result = [];
     const now = new Date();
 
-    // Last 6 months
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const yyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const monthIdx = d.getMonth();
 
-      const countRow = this.db.prepare(`
-        SELECT COUNT(*) as c
-        FROM reading_events
-        WHERE substr(timestamp, 1, 7) = ?
-      `).get(yyyyMm);
+      let count = 0;
+      if (this.isSqlite) {
+        const countRow = this.db.prepare(`
+          SELECT COUNT(*) as c
+          FROM reading_events
+          WHERE substr(timestamp, 1, 7) = ?
+        `).get(yyyyMm);
+        count = countRow ? countRow.c : 0;
+      } else {
+        count = this.memStore.events.filter(e => e.timestamp.startsWith(yyyyMm)).length;
+      }
 
       result.push({
         month: monthNames[monthIdx],
         shortMonth: shortMonthNames[monthIdx],
-        chapters: countRow ? countRow.c : 0,
+        chapters: count,
       });
     }
 
@@ -526,33 +692,23 @@ export class TrackerDatabase {
   }
 
   _calculateGenreDistribution() {
-    const palette = [
-      '#A8D5BA', // Sage green
-      '#F6A596', // Coral peach
-      '#C8B6E2', // Lavender
-      '#F8C866', // Honey yellow
-      '#A2C2E8', // Soft sky blue
-      '#D8B4E2', // Orchid
-      '#E8D5B5', // Warm almond
-      '#BCE5D0', // Mint
-    ];
-
+    const palette = ['#A8D5BA', '#F6A596', '#C8B6E2', '#F8C866', '#A2C2E8', '#D8B4E2'];
     const genreCounts = {};
-    const mangas = this.db.prepare('SELECT genres FROM mangas').all();
 
-    for (const m of mangas) {
-      try {
-        const list = JSON.parse(m.genres || '[]');
-        if (Array.isArray(list)) {
-          for (const g of list) {
-            const trimmed = g.trim();
-            if (trimmed) {
-              genreCounts[trimmed] = (genreCounts[trimmed] || 0) + 1;
-            }
+    const genreLists = this.isSqlite
+      ? this.db.prepare('SELECT genres FROM mangas').all().map(m => {
+          try { return JSON.parse(m.genres || '[]'); } catch (e) { return []; }
+        })
+      : Object.values(this.memStore.mangas).map(m => m.genres || []);
+
+    for (const list of genreLists) {
+      if (Array.isArray(list)) {
+        for (const g of list) {
+          const trimmed = g.trim();
+          if (trimmed) {
+            genreCounts[trimmed] = (genreCounts[trimmed] || 0) + 1;
           }
         }
-      } catch (e) {
-        // ignore
       }
     }
 
@@ -560,93 +716,142 @@ export class TrackerDatabase {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6);
 
-    const totalGenreOccurrences = sorted.reduce((sum, item) => sum + item[1], 0);
+    const total = sorted.reduce((sum, item) => sum + item[1], 0);
 
     return sorted.map(([genre, count], idx) => ({
       genre,
       count,
-      percentage: totalGenreOccurrences > 0 ? Math.round((count / totalGenreOccurrences) * 100) : 0,
+      percentage: total > 0 ? Math.round((count / total) * 100) : 0,
       color: palette[idx % palette.length],
     }));
   }
 
   _calculateMostActiveDay() {
     const daysSpanish = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const rows = this.db.prepare(`
-      SELECT strftime('%w', timestamp) as day_of_week, COUNT(*) as c
-      FROM reading_events
-      GROUP BY day_of_week
-      ORDER BY c DESC
-      LIMIT 1
-    `).all();
+    if (this.isSqlite) {
+      const rows = this.db.prepare(`
+        SELECT strftime('%w', timestamp) as day_of_week, COUNT(*) as c
+        FROM reading_events
+        GROUP BY day_of_week
+        ORDER BY c DESC
+        LIMIT 1
+      `).all();
 
-    if (rows.length === 0 || rows[0].c === 0) {
-      return { mostActiveDay: 'Sin actividad aún', mostActiveDayAvg: 0 };
+      if (rows.length === 0 || rows[0].c === 0) {
+        return { mostActiveDay: 'Sin actividad aún', mostActiveDayAvg: 0 };
+      }
+
+      const dayIndex = parseInt(rows[0].day_of_week, 10);
+      return {
+        mostActiveDay: daysSpanish[dayIndex] || 'Domingo',
+        mostActiveDayAvg: rows[0].c,
+      };
+    } else {
+      const counts = [0, 0, 0, 0, 0, 0, 0];
+      for (const e of this.memStore.events) {
+        const d = new Date(e.timestamp);
+        if (!isNaN(d.getTime())) {
+          counts[d.getDay()]++;
+        }
+      }
+      let maxIdx = 0;
+      for (let i = 1; i < 7; i++) {
+        if (counts[i] > counts[maxIdx]) maxIdx = i;
+      }
+      return {
+        mostActiveDay: counts[maxIdx] > 0 ? daysSpanish[maxIdx] : 'Sin actividad aún',
+        mostActiveDayAvg: counts[maxIdx],
+      };
     }
-
-    const dayIndex = parseInt(rows[0].day_of_week, 10);
-    return {
-      mostActiveDay: daysSpanish[dayIndex] || 'Domingo',
-      mostActiveDayAvg: rows[0].c,
-    };
   }
 
   _calculateFavoriteReadingTime() {
-    const rows = this.db.prepare(`
-      SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hr, COUNT(*) as c
-      FROM reading_events
-      GROUP BY hr
-    `).all();
+    if (this.isSqlite) {
+      const rows = this.db.prepare(`
+        SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hr, COUNT(*) as c
+        FROM reading_events
+        GROUP BY hr
+      `).all();
 
-    if (rows.length === 0) return 'Sin datos aún';
+      if (rows.length === 0) return 'Sin datos aún';
 
-    let morning = 0;   // 06:00 - 12:00
-    let afternoon = 0; // 12:00 - 18:00
-    let evening = 0;   // 18:00 - 24:00
-    let night = 0;     // 00:00 - 06:00
+      let morning = 0;
+      let afternoon = 0;
+      let evening = 0;
+      let night = 0;
 
-    for (const r of rows) {
-      const hr = r.hr;
-      const count = r.c;
-      if (hr >= 6 && hr < 12) morning += count;
-      else if (hr >= 12 && hr < 18) afternoon += count;
-      else if (hr >= 18 && hr < 24) evening += count;
-      else night += count;
+      for (const r of rows) {
+        const hr = r.hr;
+        const count = r.c;
+        if (hr >= 6 && hr < 12) morning += count;
+        else if (hr >= 12 && hr < 18) afternoon += count;
+        else if (hr >= 18 && hr < 24) evening += count;
+        else night += count;
+      }
+
+      const max = Math.max(morning, afternoon, evening, night);
+      if (max === 0) return 'Sin datos aún';
+      if (max === evening) return 'Noche (18:00 - 24:00)';
+      if (max === afternoon) return 'Tarde (12:00 - 18:00)';
+      if (max === morning) return 'Mañana (06:00 - 12:00)';
+      return 'Madrugada (00:00 - 06:00)';
+    } else {
+      if (this.memStore.events.length === 0) return 'Sin datos aún';
+      let morning = 0, afternoon = 0, evening = 0, night = 0;
+      for (const e of this.memStore.events) {
+        const hr = new Date(e.timestamp).getHours();
+        if (hr >= 6 && hr < 12) morning++;
+        else if (hr >= 12 && hr < 18) afternoon++;
+        else if (hr >= 18 && hr < 24) evening++;
+        else night++;
+      }
+      const max = Math.max(morning, afternoon, evening, night);
+      if (max === 0) return 'Sin datos aún';
+      if (max === evening) return 'Noche (18:00 - 24:00)';
+      if (max === afternoon) return 'Tarde (12:00 - 18:00)';
+      if (max === morning) return 'Mañana (06:00 - 12:00)';
+      return 'Madrugada (00:00 - 06:00)';
     }
-
-    const max = Math.max(morning, afternoon, evening, night);
-    if (max === 0) return 'Sin datos aún';
-    if (max === evening) return 'Noche (18:00 - 24:00)';
-    if (max === afternoon) return 'Tarde (12:00 - 18:00)';
-    if (max === morning) return 'Mañana (06:00 - 12:00)';
-    return 'Madrugada (00:00 - 06:00)';
   }
 
   // --- SETTINGS / META ---
 
   setMeta(key, value) {
-    const stmt = this.db.prepare(`
-      INSERT INTO sync_meta (key, value) VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `);
-    stmt.run(key, typeof value === 'string' ? value : JSON.stringify(value));
+    if (this.isSqlite) {
+      const stmt = this.db.prepare(`
+        INSERT INTO sync_meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `);
+      stmt.run(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } else {
+      this.memStore.meta[key] = value;
+      this.saveFallback();
+    }
   }
 
   getMeta(key) {
-    const row = this.db.prepare('SELECT value FROM sync_meta WHERE key = ?').get(key);
-    return row ? row.value : null;
+    if (this.isSqlite) {
+      const row = this.db.prepare('SELECT value FROM sync_meta WHERE key = ?').get(key);
+      return row ? row.value : null;
+    } else {
+      return this.memStore.meta[key] || null;
+    }
   }
 
-  // Clear all data (for testing / reset)
   clearAll() {
-    this.db.exec(`
-      DELETE FROM reading_events;
-      DELETE FROM mangas;
-      DELETE FROM sync_meta;
-    `);
+    if (this.isSqlite) {
+      this.db.exec(`
+        DELETE FROM reading_events;
+        DELETE FROM mangas;
+        DELETE FROM sync_meta;
+      `);
+    } else {
+      this.memStore = { mangas: {}, events: [], meta: {} };
+      this.saveFallback();
+    }
   }
 
-  // --- ROW FORMATTERS ---
+  // --- FORMATTERS ---
 
   _formatMangaRow(row) {
     return {
