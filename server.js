@@ -87,7 +87,7 @@ function parseBody(req, maxSize = 50 * 1024 * 1024) {
   });
 }
 
-export const server = http.createServer(async (req, res) => {
+export async function handleRequest(req, res) {
   // Global CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -410,7 +410,13 @@ export const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': contentType });
     res.end(data);
   });
-});
+}
+
+export function createServerInstance() {
+  return http.createServer(handleRequest);
+}
+
+export const server = createServerInstance();
 
 const isMainModule = process.argv[1] && (
   path.resolve(process.argv[1]) === path.resolve(__filename)

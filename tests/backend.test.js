@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'http';
 import { TrackerDatabase } from '../database.js';
-import { server } from '../server.js';
+import { createServerInstance } from '../server.js';
 
 // Helper to make HTTP requests against the test server
 function request(app, options, body = null) {
@@ -32,16 +32,24 @@ test('Mihon Reading Tracker Backend Test Suite', async (t) => {
   let port;
 
   t.before(() => {
-    return new Promise(resolve => {
-      testServer = server.listen(0, () => {
+    return new Promise((resolve, reject) => {
+      testServer = createServerInstance();
+      testServer.listen(0, () => {
         port = testServer.address().port;
         resolve();
       });
+      testServer.on('error', reject);
     });
   });
 
   t.after(() => {
-    return new Promise(resolve => testServer.close(resolve));
+    return new Promise(resolve => {
+      if (testServer && testServer.listening) {
+        testServer.close(resolve);
+      } else {
+        resolve();
+      }
+    });
   });
 
   t.beforeEach(async () => {
