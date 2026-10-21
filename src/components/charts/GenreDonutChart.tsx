@@ -9,14 +9,17 @@ interface GenreDonutChartProps {
 }
 
 export const GenreDonutChart: React.FC<GenreDonutChartProps> = ({ data }) => {
+  // Soft pastel colors inspired by reference images
+  const pastelPalette = ['#97CAA8', '#F6A596', '#C8B6E2', '#F8C866', '#B5E2FA'];
+
   const chartData = {
     labels: data.map((d) => d.genre),
     datasets: [
       {
         data: data.map((d) => d.percentage),
-        backgroundColor: data.map((d) => d.color),
-        borderColor: '#131024',
-        borderWidth: 3,
+        backgroundColor: data.map((_, i) => pastelPalette[i % pastelPalette.length]),
+        borderColor: '#2D2926',
+        borderWidth: 2,
         hoverOffset: 6,
       },
     ],
@@ -31,15 +34,16 @@ export const GenreDonutChart: React.FC<GenreDonutChartProps> = ({ data }) => {
         display: false,
       },
       tooltip: {
-        backgroundColor: '#1e1935',
-        titleColor: '#e9d5ff',
-        bodyColor: '#ffffff',
-        borderColor: '#a855f7',
-        borderWidth: 1,
+        backgroundColor: '#FFFFFF',
+        titleColor: '#242220',
+        bodyColor: '#5C5651',
+        borderColor: '#2D2926',
+        borderWidth: 1.5,
         padding: 10,
-        cornerRadius: 8,
+        cornerRadius: 12,
         callbacks: {
-          label: (context: any) => ` ${context.label}: ${context.raw}% (${data[context.dataIndex].count} caps)`,
+          label: (context: any) =>
+            ` ${context.label}: ${context.raw}% (${data[context.dataIndex].count} caps)`,
         },
       },
     },
@@ -58,13 +62,21 @@ export const GenreDonutChart: React.FC<GenreDonutChartProps> = ({ data }) => {
           pointerEvents: 'none',
         }}
       >
-        <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span
+          style={{
+            fontSize: '11px',
+            color: '#7A746E',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            fontWeight: 700,
+          }}
+        >
           Top Género
         </span>
-        <div style={{ fontSize: '16px', fontWeight: 800, color: '#f3e8ff' }}>
+        <div style={{ fontSize: '17px', fontWeight: 800, color: '#242220' }}>
           {data[0]?.genre || 'Shonen'}
         </div>
-        <div style={{ fontSize: '11px', color: '#a855f7', fontWeight: 700 }}>
+        <div style={{ fontSize: '12px', color: '#567D65', fontWeight: 800 }}>
           {data[0]?.percentage || 52}%
         </div>
       </div>

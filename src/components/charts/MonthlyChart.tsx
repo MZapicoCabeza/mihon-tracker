@@ -18,17 +18,20 @@ interface MonthlyChartProps {
 
 export const MonthlyChart: React.FC<MonthlyChartProps> = ({ data }) => {
   const chartData = {
-    labels: data.map((d) => d.shortMonth),
+    labels: data.map((d) => d.shortMonth.toUpperCase()),
     datasets: [
       {
         label: 'Capítulos por mes',
         data: data.map((d) => d.chapters),
         backgroundColor: data.map((d) =>
-          d.chapters > 0 ? 'rgba(168, 85, 247, 0.85)' : 'rgba(255, 255, 255, 0.05)'
+          d.chapters > 0 ? '#C8B6E2' : '#F0EBE1'
         ),
-        hoverBackgroundColor: 'rgba(216, 180, 254, 1)',
-        borderRadius: 6,
+        hoverBackgroundColor: '#8F7BB5',
+        borderRadius: 16,
         borderSkipped: false,
+        borderColor: '#2D2926',
+        borderWidth: 1.5,
+        barPercentage: 0.6,
       },
     ],
   };
@@ -41,13 +44,13 @@ export const MonthlyChart: React.FC<MonthlyChartProps> = ({ data }) => {
         display: false,
       },
       tooltip: {
-        backgroundColor: '#1e1935',
-        titleColor: '#e9d5ff',
-        bodyColor: '#ffffff',
-        borderColor: '#8b5cf6',
-        borderWidth: 1,
+        backgroundColor: '#FFFFFF',
+        titleColor: '#242220',
+        bodyColor: '#5C5651',
+        borderColor: '#2D2926',
+        borderWidth: 1.5,
         padding: 10,
-        cornerRadius: 8,
+        cornerRadius: 12,
         displayColors: false,
         callbacks: {
           title: (items: any) => {
@@ -64,22 +67,30 @@ export const MonthlyChart: React.FC<MonthlyChartProps> = ({ data }) => {
           display: false,
         },
         ticks: {
-          color: '#94a3b8',
+          color: '#5C5651',
+          font: {
+            size: 10,
+            weight: 700 as const,
+          },
+        },
+        border: {
+          display: false,
+        },
+      },
+      y: {
+        grid: {
+          color: 'rgba(45, 41, 38, 0.08)',
+        },
+        ticks: {
+          color: '#8A847E',
           font: {
             size: 10,
             weight: 600 as const,
           },
         },
-      },
-      y: {
-        grid: {
-          color: 'rgba(255, 255, 255, 0.05)',
-        },
-        ticks: {
-          color: '#64748b',
-          font: {
-            size: 10,
-          },
+        border: {
+          dash: [4, 4],
+          display: false,
         },
       },
     },

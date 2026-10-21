@@ -9,9 +9,9 @@
   body {
     margin: 0;
     padding: 0;
-    background-color: #0b0816;
-    color: #f3f4f6;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #FAF7F2;
+    color: #242220;
+    font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
   }
 }
@@ -23,6 +23,17 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Subtle cute outline pill style from reference */
+.app-card {
+  background-color: #ffffff;
+  border: 1.5px solid #2D2926;
+  border-radius: 1.25rem;
+}
+
+.pill-border {
+  border: 1.5px solid #2D2926;
 }
 
 /* Animations */

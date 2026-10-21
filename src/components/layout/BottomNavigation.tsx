@@ -16,64 +16,60 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
 }) => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 max-w-md mx-auto px-4 pb-5 pt-2">
-      <div className="bg-[#151128]/90 backdrop-blur-xl border border-purple-900/40 rounded-2xl p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_20px_rgba(139,92,246,0.15)] flex items-center justify-around">
+      <div className="bg-[#F8C866] border-[1.8px] border-[#2D2926] rounded-full p-2 shadow-[0_6px_0px_#2D2926] flex items-center justify-around">
+        {/* Inicio */}
         <button
           onClick={() => onTabChange('dashboard')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-4 rounded-xl transition-all duration-300 relative ${
+          className={`flex items-center justify-center gap-1.5 py-2 px-4 rounded-full transition-all duration-200 ${
             currentTab === 'dashboard'
-              ? 'text-purple-300 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-[#2D2926] text-[#FAF7F2] font-bold shadow-sm'
+              : 'text-[#2D2926] hover:bg-[#F2BC50] font-semibold'
           }`}
         >
+          <Home className="w-5 h-5 stroke-[2.2]" />
           {currentTab === 'dashboard' && (
-            <div className="absolute inset-0 bg-purple-600/20 rounded-xl border border-purple-500/30 blur-[1px]" />
+            <span className="text-xs tracking-tight font-extrabold">Inicio</span>
           )}
-          <Home className={`w-5 h-5 relative z-10 transition-transform ${currentTab === 'dashboard' ? 'scale-110 text-purple-400' : ''}`} />
-          <span className="text-[11px] font-medium relative z-10">Inicio</span>
         </button>
 
+        {/* Biblioteca */}
         <button
           onClick={() => onTabChange('library')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-4 rounded-xl transition-all duration-300 relative ${
+          className={`flex items-center justify-center gap-1.5 py-2 px-4 rounded-full transition-all duration-200 ${
             currentTab === 'library'
-              ? 'text-purple-300 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-[#2D2926] text-[#FAF7F2] font-bold shadow-sm'
+              : 'text-[#2D2926] hover:bg-[#F2BC50] font-semibold'
           }`}
         >
+          <BookOpen className="w-5 h-5 stroke-[2.2]" />
           {currentTab === 'library' && (
-            <div className="absolute inset-0 bg-purple-600/20 rounded-xl border border-purple-500/30 blur-[1px]" />
+            <span className="text-xs tracking-tight font-extrabold">Biblioteca</span>
           )}
-          <BookOpen className={`w-5 h-5 relative z-10 transition-transform ${currentTab === 'library' ? 'scale-110 text-purple-400' : ''}`} />
-          <span className="text-[11px] font-medium relative z-10">Biblioteca</span>
         </button>
 
+        {/* Estadísticas */}
         <button
           onClick={() => onTabChange('stats')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-4 rounded-xl transition-all duration-300 relative ${
+          className={`flex items-center justify-center gap-1.5 py-2 px-4 rounded-full transition-all duration-200 ${
             currentTab === 'stats'
-              ? 'text-purple-300 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-[#2D2926] text-[#FAF7F2] font-bold shadow-sm'
+              : 'text-[#2D2926] hover:bg-[#F2BC50] font-semibold'
           }`}
         >
+          <BarChart3 className="w-5 h-5 stroke-[2.2]" />
           {currentTab === 'stats' && (
-            <div className="absolute inset-0 bg-purple-600/20 rounded-xl border border-purple-500/30 blur-[1px]" />
+            <span className="text-xs tracking-tight font-extrabold">Métricas</span>
           )}
-          <BarChart3 className={`w-5 h-5 relative z-10 transition-transform ${currentTab === 'stats' ? 'scale-110 text-purple-400' : ''}`} />
-          <span className="text-[11px] font-medium relative z-10">Estadísticas</span>
         </button>
 
-        {/* Sync / Mihon Webhook Simulator Button */}
+        {/* Sync Webhook Button */}
         <button
           onClick={onOpenWebhookModal}
           title="Simulador de Webhook Mihon"
-          className="flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl text-purple-400 hover:text-purple-200 hover:bg-purple-950/40 transition-all border border-purple-800/40 bg-purple-950/20"
+          className="flex items-center justify-center p-2 rounded-full text-[#2D2926] hover:bg-[#F2BC50] transition-colors relative"
         >
-          <div className="relative">
-            <Radio className="w-5 h-5" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full" />
-          </div>
-          <span className="text-[10px] font-medium text-purple-300">Sync</span>
+          <Radio className="w-5 h-5 stroke-[2.2]" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#52796F] rounded-full border border-[#FAF7F2]" />
         </button>
       </div>
     </nav>

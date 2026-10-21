@@ -162,20 +162,16 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0816] text-gray-100 flex justify-center selection:bg-purple-600 selection:text-white">
-      {/* Mobile container wrapper */}
-      <div className="w-full max-w-md min-h-screen bg-[#0e0a1e] relative px-4 pt-3 flex flex-col shadow-[0_0_80px_rgba(0,0,0,0.8),0_0_30px_rgba(168,85,247,0.06)]">
-        {/* Glow Effects Background */}
-        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-96 h-56 bg-purple-600/10 rounded-full blur-[90px] pointer-events-none" />
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-72 h-44 bg-fuchsia-600/10 rounded-full blur-[80px] pointer-events-none" />
-
+    <div className="min-h-screen bg-[#EFE9DF] text-[#242220] flex justify-center selection:bg-[#B8DEC6] selection:text-[#242220]">
+      {/* Mobile container wrapper (Warm Light Pastel Theme inspired by reference) */}
+      <div className="w-full max-w-md min-h-screen bg-[#FAF7F2] border-x-[2px] border-[#2D2926]/15 relative px-4 pt-3 flex flex-col shadow-xl">
         {/* Floating Toast Notification */}
         {toastMessage && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm flex items-center gap-2.5 p-3 rounded-2xl bg-[#1d143a]/95 border border-purple-500/50 shadow-[0_8px_30px_rgba(168,85,247,0.35)] backdrop-blur-md animate-slideDown">
-            <div className="p-1.5 rounded-xl bg-purple-500/20 text-purple-300">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm flex items-center gap-2.5 p-3 rounded-2xl bg-white border-[2px] border-[#2D2926] shadow-[0_6px_0px_#2D2926] animate-slideDown">
+            <div className="w-7 h-7 rounded-full bg-[#A8D5BA] border-[1.5px] border-[#2D2926] flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-[#242220]" />
             </div>
-            <span className="text-xs font-semibold text-gray-100 flex-1">{toastMessage}</span>
+            <span className="text-xs font-black text-[#242220] flex-1">{toastMessage}</span>
           </div>
         )}
 
