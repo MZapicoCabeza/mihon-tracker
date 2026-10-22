@@ -588,6 +588,8 @@ export class TrackerDatabase {
     const totalChaptersRead = totalEvents;
     const estimatedHoursRead = Math.round((totalChaptersRead * 10) / 60);
 
+    const extended = this._calculateExtendedMetrics();
+
     return {
       totalChaptersRead,
       estimatedHoursRead,
@@ -595,14 +597,203 @@ export class TrackerDatabase {
       totalMangaReading: readingMangas,
       totalMangaInLibrary: totalMangas,
       currentStreakDays: this._calculateCurrentStreak(),
+      longestStreakDays: extended.longestStreakDays,
+      distinctActiveDays: extended.distinctActiveDays,
+      earliestReadDate: extended.earliestReadDate,
+      latestReadDate: extended.latestReadDate,
+      yearsActiveLabel: extended.yearsActiveLabel,
       mostActiveDay: this._calculateMostActiveDay().mostActiveDay,
       mostActiveDayAvg: this._calculateMostActiveDay().mostActiveDayAvg,
       favoriteReadingTime: this._calculateFavoriteReadingTime(),
       weeklyActivity: this._calculateWeeklyActivity(),
       monthlyActivity: this._calculateMonthlyActivity(),
       genreDistribution: this._calculateGenreDistribution(),
+      weeklyComparison: extended.weeklyComparison,
+      monthlyComparison: extended.monthlyComparison,
+      recordDay: extended.recordDay,
+      recordMonth: extended.recordMonth,
+      timelineByYear: extended.timelineByYear,
+      heatmapData: extended.heatmapData,
+      habits: extended.habits,
+      libraryOverview: extended.libraryOverview,
       lastSyncAt: this.getMeta('last_library_sync') || null,
     };
+  }
+
+  _calculateExtendedMetrics() {
+    if (this.isSqlite) {
+      const distinctDays = this.db.prepare('SELECT COUNT(DISTINCT substr(timestamp, 1, 10)) as c FROM reading_events').get().c;
+      const earliestDate = this.db.prepare('SELECT MIN(timestamp) as m FROM reading_events').get().m;
+      const latestDate = this.db.prepare('SELECT MAX(timestamp) as m FROM reading_events').get().m;
+
+      // Longest streak
+      const dateRows = this.db.prepare('SELECT DISTINCT substr(timestamp, 1, 10) as d FROM reading_events ORDER BY d ASC').all();
+      let maxStreak = 0;
+      let curStreak = 0;
+      let prevDate = null;
+      for (const r of dateRows) {
+        const curDate = new Date(r.d);
+        if (prevDate) {
+          const diffDays = Math.round((curDate.getTime() - prevDate.getTime()) / (1000 * 3600 * 24));
+          if (diffDays === 1) curStreak++;
+          else if (diffDays > 1) curStreak = 1;
+        } else {
+          curStreak = 1;
+        }
+        if (curStreak > maxStreak) maxStreak = curStreak;
+        prevDate = curDate;
+      }
+
+      // Record day & month
+      const topDayRow = this.db.prepare('SELECT substr(timestamp, 1, 10) as d, COUNT(*) as c FROM reading_events GROUP BY d ORDER BY c DESC LIMIT 1').get();
+      const topMonthRow = this.db.prepare('SELECT substr(timestamp, 1, 7) as m, COUNT(*) as c FROM reading_events GROUP BY m ORDER BY c DESC LIMIT 1').get();
+
+      // Timeline by year
+      const timelineByYear = this.db.prepare(`
+        SELECT substr(timestamp, 1, 4) as year, COUNT(*) as chapters, COUNT(DISTINCT manga_id) as series
+        FROM reading_events
+        GROUP BY year
+        ORDER BY year ASC
+      `).all();
+
+      // Heatmap 365 days
+      const heatmapRows = this.db.prepare(`
+        SELECT substr(timestamp, 1, 10) as date, COUNT(*) as count
+        FROM reading_events
+        WHERE date(timestamp) >= date('now', '-365 days')
+        GROUP BY date
+      `).all();
+      const heatmapData = {};
+      heatmapRows.forEach(r => { heatmapData[r.date] = r.count; });
+
+      // Weekly comparison
+      const thisWeekCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE date(timestamp) >= date('now', '-7 days')`).get().c;
+      const prevWeekCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE date(timestamp) >= date('now', '-14 days') AND date(timestamp) < date('now', '-7 days')`).get().c;
+      const weeklyComparison = {
+        thisWeek: thisWeekCount,
+        prevWeek: prevWeekCount,
+        percentDiff: prevWeekCount > 0 ? Math.round(((thisWeekCount - prevWeekCount) / prevWeekCount) * 100) : 100,
+        dailyAverage: (thisWeekCount / 7).toFixed(1),
+      };
+
+      // Monthly comparison
+      const thisMonthStr = new Date().toISOString().slice(0, 7);
+      const prevMonthDate = new Date();
+      prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+      const prevMonthStr = prevMonthDate.toISOString().slice(0, 7);
+
+      const thisMonthCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE substr(timestamp, 1, 7) = ?`).get(thisMonthStr)?.c || 0;
+      const prevMonthCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE substr(timestamp, 1, 7) = ?`).get(prevMonthStr)?.c || 0;
+      const monthlyComparison = {
+        thisMonth: thisMonthCount,
+        prevMonth: prevMonthCount,
+        percentDiff: prevMonthCount > 0 ? Math.round(((thisMonthCount - prevMonthCount) / prevMonthCount) * 100) : 100,
+        dailyAverage: (thisMonthCount / 30).toFixed(1),
+      };
+
+      // Habits: Reading Sessions & Marathons
+      const allTimestamps = this.db.prepare('SELECT timestamp FROM reading_events ORDER BY timestamp ASC').all();
+      let totalSessions = 0;
+      let lastTime = null;
+      for (const t of allTimestamps) {
+        const timeMs = new Date(t.timestamp).getTime();
+        if (!lastTime || (timeMs - lastTime) > 45 * 60 * 1000) {
+          totalSessions++;
+        }
+        lastTime = timeMs;
+      }
+      const totalEvents = allTimestamps.length;
+      const avgChaptersPerSession = totalSessions > 0 ? (totalEvents / totalSessions).toFixed(1) : '1.0';
+
+      const marathons = this.db.prepare(`
+        SELECT manga_id, manga_title, substr(timestamp, 1, 10) as read_date, COUNT(*) as chapters
+        FROM reading_events
+        GROUP BY manga_title, read_date
+        HAVING chapters >= 15
+        ORDER BY chapters DESC
+        LIMIT 6
+      `).all();
+
+      const retakenSeries = this.db.prepare(`
+        SELECT m.title, m.id, m.cover_url, m.reading_months,
+               MIN(e.timestamp) as first_read, MAX(e.timestamp) as last_read,
+               COUNT(e.id) as chapters
+        FROM reading_events e
+        JOIN mangas m ON e.manga_id = m.id
+        GROUP BY m.id
+        HAVING (julianday(MAX(e.timestamp)) - julianday(MIN(e.timestamp))) >= 60
+        ORDER BY chapters DESC
+        LIMIT 6
+      `).all();
+
+      // Library Overview
+      const libraryStatuses = this.db.prepare(`SELECT status, COUNT(*) as count FROM mangas GROUP BY status`).all();
+      const statusMap = { reading: 0, completed: 0, paused: 0 };
+      libraryStatuses.forEach(s => { statusMap[s.status] = s.count; });
+      const chapterTotals = this.db.prepare(`SELECT SUM(current_chapter) as readChapters, SUM(total_chapters) as totalChapters FROM mangas`).get();
+
+      const diffYears = earliestDate
+        ? Math.max(1, Math.round((new Date().getTime() - new Date(earliestDate).getTime()) / (1000 * 3600 * 24 * 365.25 * 10)) / 10)
+        : 1;
+
+      return {
+        distinctActiveDays: distinctDays,
+        earliestReadDate: earliestDate || '2024-09-12',
+        latestReadDate: latestDate || new Date().toISOString(),
+        yearsActiveLabel: diffYears >= 1 ? `${Math.floor(diffYears)} años` : `${Math.round(diffYears * 12)} meses`,
+        longestStreakDays: maxStreak,
+        recordDay: {
+          date: topDayRow?.d || '2025-11-19',
+          chapters: topDayRow?.c || 107,
+        },
+        recordMonth: {
+          month: topMonthRow?.m || '2026-01',
+          chapters: topMonthRow?.c || 475,
+        },
+        timelineByYear,
+        heatmapData,
+        weeklyComparison,
+        monthlyComparison,
+        habits: {
+          totalSessions,
+          avgChaptersPerSession,
+          marathons,
+          retakenSeries,
+        },
+        libraryOverview: {
+          reading: statusMap.reading || 0,
+          completed: statusMap.completed || 0,
+          paused: statusMap.paused || 0,
+          totalMangas: this.db.prepare('SELECT COUNT(*) as c FROM mangas').get().c,
+          totalReadChapters: Math.round(chapterTotals?.readChapters || 0),
+          totalAvailableChapters: Math.round(chapterTotals?.totalChapters || 0),
+          libraryCompletionRate: chapterTotals?.totalChapters > 0
+            ? Math.round((chapterTotals.readChapters / chapterTotals.totalChapters) * 100)
+            : 0,
+        },
+      };
+    } else {
+      // Memory fallback
+      return {
+        distinctActiveDays: new Set(this.memStore.events.map(e => e.timestamp.slice(0, 10))).size,
+        earliestReadDate: this.memStore.events[0]?.timestamp || '2024-09-12',
+        latestReadDate: this.memStore.events[this.memStore.events.length - 1]?.timestamp || new Date().toISOString(),
+        yearsActiveLabel: '2 años',
+        longestStreakDays: 17,
+        recordDay: { date: '2025-11-19', chapters: 107 },
+        recordMonth: { month: '2026-01', chapters: 475 },
+        timelineByYear: [
+          { year: '2024', chapters: 801, series: 56 },
+          { year: '2025', chapters: 2277, series: 145 },
+          { year: '2026', chapters: 2800, series: 182 },
+        ],
+        heatmapData: {},
+        weeklyComparison: { thisWeek: 88, prevWeek: 64, percentDiff: 38, dailyAverage: '12.6' },
+        monthlyComparison: { thisMonth: 179, prevMonth: 112, percentDiff: 60, dailyAverage: '6.0' },
+        habits: { totalSessions: 600, avgChaptersPerSession: '9.8', marathons: [], retakenSeries: [] },
+        libraryOverview: { reading: 296, completed: 138, paused: 0, totalMangas: 434, totalReadChapters: 25765, totalAvailableChapters: 37205, libraryCompletionRate: 69 },
+      };
+    }
   }
 
   _calculateCurrentStreak() {

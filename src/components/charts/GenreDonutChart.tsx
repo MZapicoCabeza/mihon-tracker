@@ -9,17 +9,16 @@ interface GenreDonutChartProps {
 }
 
 export const GenreDonutChart: React.FC<GenreDonutChartProps> = ({ data }) => {
-  // Soft pastel colors inspired by reference images
-  const pastelPalette = ['#97CAA8', '#F6A596', '#C8B6E2', '#F8C866', '#B5E2FA'];
+  const modernPalette = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#A855F7'];
 
   const chartData = {
     labels: data.map((d) => d.genre),
     datasets: [
       {
         data: data.map((d) => d.percentage),
-        backgroundColor: data.map((_, i) => pastelPalette[i % pastelPalette.length]),
-        borderColor: '#2D2926',
-        borderWidth: 2,
+        backgroundColor: data.map((_, i) => modernPalette[i % modernPalette.length]),
+        borderColor: '#FFFFFF',
+        borderWidth: 3,
         hoverOffset: 6,
       },
     ],
@@ -28,26 +27,26 @@ export const GenreDonutChart: React.FC<GenreDonutChartProps> = ({ data }) => {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '72%',
+    cutout: '74%',
     plugins: {
       legend: {
         display: false,
       },
       tooltip: {
-        backgroundColor: '#FFFFFF',
-        titleColor: '#242220',
-        bodyColor: '#5C5651',
-        borderColor: '#2D2926',
-        borderWidth: 1.5,
+        backgroundColor: '#1E1238',
+        titleColor: '#FFFFFF',
+        bodyColor: '#E9D5FF',
         padding: 10,
         cornerRadius: 12,
         callbacks: {
           label: (context: any) =>
-            ` ${context.label}: ${context.raw}% (${data[context.dataIndex].count} caps)`,
+            ` ${context.label}: ${context.raw}% (${data[context.dataIndex]?.count || 0} caps)`,
         },
       },
     },
   };
+
+  const topGenre = data[0] || { genre: 'Romance', percentage: 32 };
 
   return (
     <div style={{ height: '190px', position: 'relative', width: '100%' }}>
@@ -62,23 +61,12 @@ export const GenreDonutChart: React.FC<GenreDonutChartProps> = ({ data }) => {
           pointerEvents: 'none',
         }}
       >
-        <span
-          style={{
-            fontSize: '11px',
-            color: '#7A746E',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            fontWeight: 700,
-          }}
-        >
-          Top Género
+        <span className="text-xl font-black text-[#1E1238] block leading-none">
+          {topGenre.percentage}%
         </span>
-        <div style={{ fontSize: '17px', fontWeight: 800, color: '#242220' }}>
-          {data[0]?.genre || 'Shonen'}
-        </div>
-        <div style={{ fontSize: '12px', color: '#567D65', fontWeight: 800 }}>
-          {data[0]?.percentage || 52}%
-        </div>
+        <span className="text-[10px] font-bold text-[#6D28D9] uppercase tracking-wider block mt-1">
+          {topGenre.genre}
+        </span>
       </div>
     </div>
   );

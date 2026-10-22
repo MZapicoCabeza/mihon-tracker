@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Heart, CheckCircle2, PauseCircle, PlayCircle, Layers, X, Clock, ArrowUpDown } from 'lucide-react';
 import { MangaItem, MangaStatus } from '../../types/tracker';
+import { MangaDetailModal } from './MangaDetailModal';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
 
 interface LibraryTabProps {
@@ -20,8 +21,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [sortBy, setSortBy] = useState<SortOption>('duration'); // Default to longest read!
   const [groupByCategory, setGroupByCategory] = useState(false);
+  const [selectedManga, setSelectedManga] = useState<MangaItem | null>(null);
 
   // Filter & sort logic
   const filteredMangas = useMemo(() => {
@@ -71,20 +73,20 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
     switch (status) {
       case 'reading':
         return (
-          <span className="flex items-center gap-1 text-[10px] font-black text-[#242220] bg-[#A8D5BA] px-2.5 py-0.5 rounded-full border border-[#2D2926]">
-            <PlayCircle className="w-2.5 h-2.5 stroke-[2.5]" /> Leyendo
+          <span className="flex items-center gap-1 text-[10px] font-black text-[#047857] bg-[#ECFDF5] px-2.5 py-0.5 rounded-full border border-[#A7F3D0]">
+            <PlayCircle className="w-2.5 h-2.5" /> Leyendo
           </span>
         );
       case 'completed':
         return (
-          <span className="flex items-center gap-1 text-[10px] font-black text-[#242220] bg-[#C8B6E2] px-2.5 py-0.5 rounded-full border border-[#2D2926]">
-            <CheckCircle2 className="w-2.5 h-2.5 stroke-[2.5]" /> Completado
+          <span className="flex items-center gap-1 text-[10px] font-black text-[#6D28D9] bg-[#EDE9FE] px-2.5 py-0.5 rounded-full border border-[#C4B5FD]">
+            <CheckCircle2 className="w-2.5 h-2.5" /> Completado
           </span>
         );
       case 'paused':
         return (
-          <span className="flex items-center gap-1 text-[10px] font-black text-[#242220] bg-[#F8C866] px-2.5 py-0.5 rounded-full border border-[#2D2926]">
-            <PauseCircle className="w-2.5 h-2.5 stroke-[2.5]" /> En Pausa
+          <span className="flex items-center gap-1 text-[10px] font-black text-[#B45309] bg-[#FEF3C7] px-2.5 py-0.5 rounded-full border border-[#FDE68A]">
+            <PauseCircle className="w-2.5 h-2.5" /> En Pausa
           </span>
         );
     }
@@ -99,16 +101,21 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
     return (
       <div
         key={manga.id}
-        className="group relative flex gap-3.5 p-3 rounded-2xl bg-white border-[1.8px] border-[#2D2926] shadow-[0_3px_0px_#2D2926] hover:translate-y-[-1px] transition-all duration-200"
+        onClick={() => setSelectedManga(manga)}
+        className="glass-card p-3.5 flex gap-3.5 hover:shadow-md hover:border-[#C4B5FD] transition-all cursor-pointer group"
       >
         {/* Cover Image */}
-        <div className="relative w-20 h-28 rounded-xl overflow-hidden flex-shrink-0 border-[1.5px] border-[#2D2926] bg-[#F5F0E8]">
-          <img
-            src={manga.coverUrl}
-            alt={manga.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-          />
+        <div className="relative w-20 h-28 rounded-2xl overflow-hidden flex-shrink-0 bg-[#F3EFFC] border border-purple-100 shadow-2xs">
+          {manga.coverUrl ? (
+            <img
+              src={manga.coverUrl}
+              alt={manga.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-2xl">📖</div>
+          )}
 
           {/* Favorite heart button */}
           <button
@@ -116,11 +123,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
               e.stopPropagation();
               onToggleFavorite(manga.id);
             }}
-            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-white/90 border border-[#2D2926] shadow-sm hover:scale-110 transition-transform"
+            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-white/90 shadow-xs hover:scale-110 transition-transform"
           >
             <Heart
               className={`w-3.5 h-3.5 ${
-                manga.isFavorite ? 'fill-[#E27D60] text-[#E27D60]' : 'text-[#8A847E]'
+                manga.isFavorite ? 'fill-[#EC4899] text-[#EC4899]' : 'text-gray-400'
               }`}
             />
           </button>
@@ -131,17 +138,17 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           <div>
             <div className="flex items-center justify-between gap-2">
               {getStatusBadge(manga.status)}
-              <span className="text-[11px] font-black font-mono text-[#242220] bg-[#FAF7F2] border border-[#2D2926] px-2 py-0.2 rounded-full">
+              <span className="text-[11px] font-black font-mono text-[#7C3AED] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
                 {percentage}%
               </span>
             </div>
 
-            <h3 className="text-sm font-black text-[#242220] truncate mt-1.5">
+            <h3 className="text-sm font-black text-[#1E1238] truncate mt-1.5 group-hover:text-[#7C3AED] transition-colors">
               {manga.title}
             </h3>
 
             {manga.author && (
-              <p className="text-[11px] font-bold text-[#8A847E] truncate">{manga.author}</p>
+              <p className="text-[11px] font-medium text-[#6B7280] truncate">{manga.author}</p>
             )}
 
             {/* Genres */}
@@ -149,7 +156,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
               {manga.genres.slice(0, 3).map((genre) => (
                 <span
                   key={genre}
-                  className="text-[9px] font-extrabold text-[#5C5651] bg-[#F5F0E8] px-2 py-0.5 rounded-full"
+                  className="text-[9px] font-bold text-[#6D28D9] bg-[#FAF5FF] px-2 py-0.5 rounded-full border border-purple-100"
                 >
                   {genre}
                 </span>
@@ -160,26 +167,27 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           {/* Progress Section */}
           <div className="mt-2 space-y-1">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="font-extrabold text-[#7A746E]">Progreso:</span>
-              <span className="font-black text-[#242220]">
+              <span className="font-semibold text-[#6B7280]">Progreso:</span>
+              <span className="font-black text-[#1E1238]">
                 {manga.currentChapter} / {manga.totalChapters} caps
               </span>
             </div>
 
             {/* Visual Capsule Progress Bar */}
-            <div className="w-full h-3 rounded-full bg-[#F0EBE1] border-[1.5px] border-[#2D2926] overflow-hidden p-0.5">
+            <div className="w-full h-2.5 rounded-full bg-[#EDE9FE] overflow-hidden p-0.5">
               <div
-                className="h-full rounded-full bg-[#A8D5BA] border-[1px] border-[#2D2926] transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] transition-all duration-500"
                 style={{ width: `${percentage}%` }}
               />
             </div>
 
-            <div className="flex items-center justify-between text-[10px] font-bold text-[#8A847E] pt-0.5 gap-1">
-              <span className="truncate">Última lectura: {formatRelativeTimeSpanish(manga.lastReadAt)}</span>
+            {/* Duration & Last read */}
+            <div className="flex items-center justify-between text-[10px] font-medium text-[#6B7280] pt-0.5 gap-1">
+              <span className="truncate">Última: {formatRelativeTimeSpanish(manga.lastReadAt)}</span>
               {manga.readingMonths !== undefined && manga.readingMonths > 0 ? (
                 <span
                   title={manga.startedAt ? `Iniciado en ${new Date(manga.startedAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}` : ''}
-                  className="flex-shrink-0 text-[#3D2622] font-black bg-[#FAF0D7] border border-[#2D2926]/40 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs"
+                  className="flex-shrink-0 text-[#92400E] font-black bg-[#FEF3C7] border border-[#FDE68A] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs"
                 >
                   <span>⏱️</span>
                   <span>{manga.readingMonths} {manga.readingMonths === 1 ? 'mes' : 'meses'}</span>
@@ -195,57 +203,59 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   return (
     <div className="space-y-4 pb-28 animate-fadeIn">
       {/* Top Header Card */}
-      <div className="-mx-4 -mt-3 bg-[#F6A596] border-b-[2px] border-[#2D2926] p-4 pt-5 rounded-b-[2.2rem] shadow-sm">
-        <div className="flex items-center justify-between">
+      <div className="pt-2 px-1">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <span className="text-[10px] font-extrabold tracking-wider text-[#3D2622] uppercase">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#7C3AED]">
               Tu Colección
             </span>
-            <h1 className="text-xl font-black text-[#242220] tracking-tight leading-none">
+            <h1 className="text-xl font-black text-[#1E1238] tracking-tight">
               BIBLIOTECA
             </h1>
           </div>
 
           <button
             onClick={() => setGroupByCategory(!groupByCategory)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black border-[1.5px] border-[#2D2926] transition-all shadow-[0_2px_0px_#2D2926] ${
-              groupByCategory ? 'bg-[#2D2926] text-white' : 'bg-[#FAF7F2] text-[#242220]'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-xs ${
+              groupByCategory
+                ? 'bg-[#7C3AED] text-white shadow-purple-500/20'
+                : 'bg-white text-[#6B7280] border border-[#E9D5FF]'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
             <span>{groupByCategory ? 'Agrupado' : 'Agrupar'}</span>
           </button>
         </div>
-      </div>
 
-      {/* Top Search Bar */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-[#8A847E] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Buscar manga, autor o género..."
-          className="w-full pl-10 pr-9 py-2.5 rounded-full bg-white border-[1.8px] border-[#2D2926] text-sm font-bold text-[#242220] placeholder-[#8A847E] focus:outline-none shadow-[0_3px_0px_#2D2926]"
-        />
-        {searchTerm && (
-          <button
-            onClick={() => setSearchTerm('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A847E] hover:text-[#242220]"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar manga, autor o género..."
+            className="w-full pl-10 pr-9 py-2.5 rounded-full bg-white border border-[#E9D5FF] text-sm font-semibold text-[#1E1238] placeholder-[#9CA3AF] focus:outline-none focus:border-[#8B5CF6] shadow-xs transition-colors"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#1E1238]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Toggles */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-1 pb-0.5">
         <button
           onClick={() => setActiveFilter('all')}
-          className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#2D2926] transition-all ${
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             activeFilter === 'all'
-              ? 'bg-[#2D2926] text-white shadow-[0_2px_0px_#2D2926]'
-              : 'bg-white text-[#242220]'
+              ? 'bg-[#7C3AED] text-white shadow-xs'
+              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60'
           }`}
         >
           Todos ({mangas.length})
@@ -253,10 +263,10 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
         <button
           onClick={() => setActiveFilter('reading')}
-          className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#2D2926] transition-all ${
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             activeFilter === 'reading'
-              ? 'bg-[#A8D5BA] text-[#242220] shadow-[0_2px_0px_#2D2926]'
-              : 'bg-white text-[#242220]'
+              ? 'bg-[#047857] text-white shadow-xs'
+              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60'
           }`}
         >
           Leyendo ({mangas.filter((m) => m.status === 'reading').length})
@@ -264,10 +274,10 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
         <button
           onClick={() => setActiveFilter('favorites')}
-          className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#2D2926] transition-all ${
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             activeFilter === 'favorites'
-              ? 'bg-[#F6A596] text-[#242220] shadow-[0_2px_0px_#2D2926]'
-              : 'bg-white text-[#242220]'
+              ? 'bg-[#EC4899] text-white shadow-xs'
+              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60'
           }`}
         >
           Favoritos ({mangas.filter((m) => m.isFavorite).length})
@@ -275,10 +285,10 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
         <button
           onClick={() => setActiveFilter('completed')}
-          className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#2D2926] transition-all ${
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             activeFilter === 'completed'
-              ? 'bg-[#C8B6E2] text-[#242220] shadow-[0_2px_0px_#2D2926]'
-              : 'bg-white text-[#242220]'
+              ? 'bg-[#6D28D9] text-white shadow-xs'
+              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60'
           }`}
         >
           Completados ({mangas.filter((m) => m.status === 'completed').length})
@@ -286,10 +296,10 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
         <button
           onClick={() => setActiveFilter('paused')}
-          className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#2D2926] transition-all ${
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             activeFilter === 'paused'
-              ? 'bg-[#F8C866] text-[#242220] shadow-[0_2px_0px_#2D2926]'
-              : 'bg-white text-[#242220]'
+              ? 'bg-[#D97706] text-white shadow-xs'
+              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60'
           }`}
         >
           En pausa ({mangas.filter((m) => m.status === 'paused').length})
@@ -298,46 +308,46 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
       {/* Sorting Selector */}
       <div className="flex items-center justify-between px-1 text-xs">
-        <span className="font-extrabold text-[#7A746E] flex items-center gap-1 text-[11px]">
-          <ArrowUpDown className="w-3 h-3" /> Ordenar:
+        <span className="font-bold text-[#6B7280] flex items-center gap-1 text-[11px]">
+          <ArrowUpDown className="w-3 h-3 text-[#7C3AED]" /> Ordenar:
         </span>
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-white border border-[#E9D5FF]/60 p-0.5 rounded-full">
+          <button
+            onClick={() => setSortBy('duration')}
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1 ${
+              sortBy === 'duration'
+                ? 'bg-gradient-to-r from-[#A855F7] to-[#EC4899] text-white shadow-xs'
+                : 'text-[#6B7280]'
+            }`}
+          >
+            <span>⏱️</span> Más tiempo
+          </button>
           <button
             onClick={() => setSortBy('recent')}
-            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all ${
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
               sortBy === 'recent'
-                ? 'bg-[#2D2926] text-white'
-                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+                ? 'bg-[#7C3AED] text-white shadow-xs'
+                : 'text-[#6B7280]'
             }`}
           >
             Recientes
           </button>
           <button
-            onClick={() => setSortBy('duration')}
-            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1 ${
-              sortBy === 'duration'
-                ? 'bg-[#E27D60] text-white shadow-xs'
-                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
-            }`}
-          >
-            <span>⏱️</span> Más tiempo leyendo
-          </button>
-          <button
             onClick={() => setSortBy('progress')}
-            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all ${
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
               sortBy === 'progress'
-                ? 'bg-[#2D2926] text-white'
-                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+                ? 'bg-[#7C3AED] text-white shadow-xs'
+                : 'text-[#6B7280]'
             }`}
           >
             Progreso
           </button>
           <button
             onClick={() => setSortBy('title')}
-            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all ${
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
               sortBy === 'title'
-                ? 'bg-[#2D2926] text-white'
-                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+                ? 'bg-[#7C3AED] text-white shadow-xs'
+                : 'text-[#6B7280]'
             }`}
           >
             A-Z
@@ -347,12 +357,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
       {/* Manga Cards List / Grouped View */}
       {filteredMangas.length === 0 ? (
-        <div className="text-center py-12 rounded-3xl bg-white border-[1.8px] border-[#2D2926] p-6 shadow-[0_4px_0px_#2D2926]">
+        <div className="glass-card p-8 text-center space-y-2">
           <span className="text-3xl">📚</span>
-          <p className="text-sm font-black text-[#242220] mt-2">
+          <p className="text-sm font-black text-[#1E1238]">
             {mangas.length === 0 ? 'Biblioteca vacía' : 'Sin resultados'}
           </p>
-          <p className="text-xs text-[#7A746E] mt-1 max-w-xs mx-auto">
+          <p className="text-xs text-[#6B7280] max-w-xs mx-auto">
             {mangas.length === 0
               ? 'Aún no has sincronizado tu biblioteca. Importa un respaldo o sincroniza desde Mihon.'
               : 'No se encontraron mangas con los filtros o término de búsqueda actual.'}
@@ -362,8 +372,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         <div className="space-y-6">
           {groupedData.favoritos.length > 0 && (
             <div className="space-y-2.5">
-              <h2 className="text-xs font-black text-[#242220] uppercase tracking-wider flex items-center gap-1.5">
-                <Heart className="w-3.5 h-3.5 fill-[#E27D60] text-[#E27D60]" /> Favoritos ({groupedData.favoritos.length})
+              <h2 className="text-xs font-black text-[#1E1238] uppercase tracking-wider flex items-center gap-1.5">
+                <Heart className="w-3.5 h-3.5 fill-[#EC4899] text-[#EC4899]" /> Favoritos ({groupedData.favoritos.length})
               </h2>
               <div className="space-y-3">{groupedData.favoritos.map(renderMangaCard)}</div>
             </div>
@@ -371,8 +381,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
           {groupedData.leyendo.length > 0 && (
             <div className="space-y-2.5">
-              <h2 className="text-xs font-black text-[#242220] uppercase tracking-wider flex items-center gap-1.5">
-                <PlayCircle className="w-3.5 h-3.5 text-[#52796F]" /> Leyendo ({groupedData.leyendo.length})
+              <h2 className="text-xs font-black text-[#1E1238] uppercase tracking-wider flex items-center gap-1.5">
+                <PlayCircle className="w-3.5 h-3.5 text-[#047857]" /> Leyendo ({groupedData.leyendo.length})
               </h2>
               <div className="space-y-3">{groupedData.leyendo.map(renderMangaCard)}</div>
             </div>
@@ -380,8 +390,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
           {groupedData.enPausa.length > 0 && (
             <div className="space-y-2.5">
-              <h2 className="text-xs font-black text-[#242220] uppercase tracking-wider flex items-center gap-1.5">
-                <PauseCircle className="w-3.5 h-3.5 text-[#F8C866]" /> En Pausa ({groupedData.enPausa.length})
+              <h2 className="text-xs font-black text-[#1E1238] uppercase tracking-wider flex items-center gap-1.5">
+                <PauseCircle className="w-3.5 h-3.5 text-[#D97706]" /> En Pausa ({groupedData.enPausa.length})
               </h2>
               <div className="space-y-3">{groupedData.enPausa.map(renderMangaCard)}</div>
             </div>
@@ -389,8 +399,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
           {groupedData.completados.length > 0 && (
             <div className="space-y-2.5">
-              <h2 className="text-xs font-black text-[#242220] uppercase tracking-wider flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-[#C8B6E2]" /> Completados ({groupedData.completados.length})
+              <h2 className="text-xs font-black text-[#1E1238] uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#6D28D9]" /> Completados ({groupedData.completados.length})
               </h2>
               <div className="space-y-3">{groupedData.completados.map(renderMangaCard)}</div>
             </div>
@@ -399,6 +409,14 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       ) : (
         <div className="space-y-3">{filteredMangas.map(renderMangaCard)}</div>
       )}
+
+      {/* Manga Detail Modal */}
+      <MangaDetailModal
+        manga={selectedManga}
+        onClose={() => setSelectedManga(null)}
+        onToggleFavorite={onToggleFavorite}
+        onUpdateStatus={onUpdateStatus}
+      />
     </div>
   );
 };

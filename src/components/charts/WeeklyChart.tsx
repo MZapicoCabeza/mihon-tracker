@@ -14,50 +14,28 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 interface WeeklyChartProps {
   data: { day: string; shortDay: string; chapters: number }[];
-  accentColor?: 'green' | 'coral' | 'purple';
+  accentColor?: string;
 }
 
-export const WeeklyChart: React.FC<WeeklyChartProps> = ({ data, accentColor = 'green' }) => {
-  const getColors = () => {
-    switch (accentColor) {
-      case 'coral':
-        return {
-          bar: '#F6A596',
-          highlight: '#E27D60',
-          border: '#2D2926',
-        };
-      case 'purple':
-        return {
-          bar: '#C8B6E2',
-          highlight: '#9B84C4',
-          border: '#2D2926',
-        };
-      default:
-        return {
-          bar: '#A8D5BA',
-          highlight: '#78B890',
-          border: '#2D2926',
-        };
-    }
-  };
-
-  const colors = getColors();
-
+export const WeeklyChart: React.FC<WeeklyChartProps> = ({ data }) => {
   const chartData = {
-    labels: data.map((d) => d.shortDay.toUpperCase()),
+    labels: data.map((d) => d.shortDay),
     datasets: [
       {
         label: 'Capítulos leídos',
         data: data.map((d) => d.chapters),
         backgroundColor: data.map((d, idx) =>
-          idx === data.length - 1 || d.chapters >= 12 ? colors.highlight : colors.bar
+          idx === data.length - 1 || d.chapters >= 15
+            ? '#8B5CF6'
+            : d.chapters > 0
+            ? '#C4B5FD'
+            : '#E9D5FF'
         ),
-        hoverBackgroundColor: '#2D2926',
-        borderRadius: 24,
+        hoverBackgroundColor: '#7C3AED',
+        borderRadius: 12,
         borderSkipped: false,
-        borderColor: colors.border,
-        borderWidth: 1.5,
-        barPercentage: 0.65,
+        borderWidth: 0,
+        barPercentage: 0.58,
       },
     ],
   };
@@ -70,11 +48,9 @@ export const WeeklyChart: React.FC<WeeklyChartProps> = ({ data, accentColor = 'g
         display: false,
       },
       tooltip: {
-        backgroundColor: '#FFFFFF',
-        titleColor: '#242220',
-        bodyColor: '#5C5651',
-        borderColor: '#2D2926',
-        borderWidth: 1.5,
+        backgroundColor: '#1E1238',
+        titleColor: '#FFFFFF',
+        bodyColor: '#E9D5FF',
         padding: 10,
         cornerRadius: 12,
         displayColors: false,
@@ -93,38 +69,31 @@ export const WeeklyChart: React.FC<WeeklyChartProps> = ({ data, accentColor = 'g
           display: false,
         },
         ticks: {
-          color: '#5C5651',
+          color: '#6B7280',
           font: {
             size: 11,
-            weight: 700 as const,
+            weight: 600 as const,
           },
-        },
-        border: {
-          display: false,
         },
       },
       y: {
+        beginAtZero: true,
         grid: {
-          color: 'rgba(45, 41, 38, 0.08)',
+          color: '#F3F4F6',
         },
         ticks: {
-          color: '#8A847E',
+          color: '#9CA3AF',
           font: {
             size: 10,
-            weight: 600 as const,
           },
-          stepSize: 4,
-        },
-        border: {
-          dash: [4, 4],
-          display: false,
+          precision: 0,
         },
       },
     },
   };
 
   return (
-    <div style={{ height: '190px', width: '100%' }}>
+    <div className="w-full h-44">
       <Bar data={chartData} options={options} />
     </div>
   );

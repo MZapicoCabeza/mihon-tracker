@@ -8,7 +8,7 @@ import { MobileDownloadModal } from './components/mobile/MobileDownloadModal';
 import { EMPTY_STATS } from './data/mockData';
 import { MangaItem, MangaStatus, ReadingHistoryEvent, ReadingStats } from './types/tracker';
 import { apiClient } from './utils/apiClient';
-import { CheckCircle2, AlertTriangle, RefreshCw, Server, WifiOff } from 'lucide-react';
+import { CheckCircle2, WifiOff } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
@@ -98,7 +98,6 @@ export const App: React.FC = () => {
           
           setRecentEvents((prev) => {
             const combined = [...newEvents, ...prev];
-            // Deduplicate by ID
             const seen = new Set<string>();
             return combined.filter(e => {
               if (seen.has(e.id)) return false;
@@ -111,7 +110,7 @@ export const App: React.FC = () => {
           const latest = newEvents[0];
           showToast(`📱 Mihon: Leído ${latest.manga_title} Cap. ${latest.chapter_number}`);
 
-          // Refresh full library and stats from server to keep calculations authoritative
+          // Refresh full library and stats from server
           const [updatedLib, updatedStats] = await Promise.all([
             apiClient.getLibrary(),
             apiClient.getStats(),
@@ -121,9 +120,9 @@ export const App: React.FC = () => {
           setLastSyncAt(new Date().toISOString());
         }
 
-        if (error) setError(null); // Clear error if poll succeeded
+        if (error) setError(null);
       } catch (err: any) {
-        // Silent catch during background polling so user experience is not disrupted
+        // Silent catch during background polling
       } finally {
         isPollingRef.current = false;
       }
@@ -139,7 +138,6 @@ export const App: React.FC = () => {
     if (!target) return;
     const nextVal = !target.isFavorite;
 
-    // Optimistic UI update
     setMangas((prev) =>
       prev.map((m) => (m.id === id ? { ...m, isFavorite: nextVal } : m))
     );
@@ -148,7 +146,7 @@ export const App: React.FC = () => {
       await apiClient.updateFavorite(id, nextVal);
     } catch (err: any) {
       showToast(`Error al actualizar favorito: ${err.message}`);
-      refreshAllData(false); // rollback
+      refreshAllData(false);
     }
   };
 
@@ -168,45 +166,45 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSelectManga = (mangaId: string) => {
+  const handleSelectManga = (_mangaId: string) => {
     setCurrentTab('library');
   };
 
   return (
-    <div className="min-h-screen bg-[#EFE9DF] text-[#242220] flex justify-center selection:bg-[#B8DEC6] selection:text-[#242220]">
-      {/* Mobile container wrapper (Warm Light Pastel Theme inspired by reference) */}
-      <div className="w-full max-w-md min-h-screen bg-[#FAF7F2] border-x-[2px] border-[#2D2926]/15 relative px-4 pt-3 flex flex-col shadow-xl">
+    <div className="min-h-screen bg-[#F7F5FC] text-[#1E1238] flex justify-center selection:bg-[#E9D5FF] selection:text-[#5B21B6]">
+      {/* Mobile container wrapper with soft lavender background */}
+      <div className="w-full max-w-md min-h-screen bg-[#F7F5FC] relative px-4 pt-2 flex flex-col">
         
         {/* Floating Toast Notification */}
         {toastMessage && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm flex items-center gap-2.5 p-3 rounded-2xl bg-white border-[2px] border-[#2D2926] shadow-[0_6px_0px_#2D2926] animate-slideDown">
-            <div className="w-7 h-7 rounded-full bg-[#A8D5BA] border-[1.5px] border-[#2D2926] flex items-center justify-center flex-shrink-0">
-              <CheckCircle2 className="w-4 h-4 text-[#242220]" />
+          <div className="fixed top-4 left-1/2 -translate-y-0 -translate-x-1/2 z-50 w-11/12 max-w-sm flex items-center gap-2.5 p-3 rounded-full bg-[#1E1238]/95 text-white backdrop-blur-xl border border-white/20 shadow-2xl animate-fadeIn">
+            <div className="w-7 h-7 rounded-full bg-[#10B981] flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-white" />
             </div>
-            <span className="text-xs font-black text-[#242220] flex-1">{toastMessage}</span>
+            <span className="text-xs font-bold text-white flex-1 truncate">{toastMessage}</span>
           </div>
         )}
 
         {/* Global Connection Error Banner if Backend is offline */}
         {error && !loading && (
-          <div className="mb-3 p-3 rounded-2xl bg-[#FFF5F2] border-[1.8px] border-[#E27D60] text-[#242220] shadow-sm flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <WifiOff className="w-4 h-4 text-[#E27D60] flex-shrink-0" />
+          <div className="mb-3 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-[#1E1238] shadow-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <WifiOff className="w-4 h-4 text-rose-600 flex-shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-black text-[#E27D60]">Sin conexión con el servidor</p>
-                <p className="text-[10px] text-[#7A746E] truncate">{error}</p>
+                <p className="text-xs font-black text-rose-700">Sin conexión con el servidor</p>
+                <p className="text-[10px] text-gray-500 truncate">{error}</p>
               </div>
             </div>
             <div className="flex gap-1.5 flex-shrink-0">
               <button
                 onClick={() => refreshAllData(true)}
-                className="py-1 px-2.5 rounded-lg bg-white border border-[#2D2926] text-[10px] font-black text-[#242220] hover:bg-[#FAF7F2] shadow-xs"
+                className="py-1 px-2.5 rounded-full bg-white border border-rose-200 text-[10px] font-bold text-rose-700 hover:bg-rose-100 shadow-2xs"
               >
                 Reintentar
               </button>
               <button
                 onClick={() => setIsSyncModalOpen(true)}
-                className="py-1 px-2.5 rounded-lg bg-[#FAF7F2] border border-[#2D2926] text-[10px] font-black text-[#242220] hover:bg-white shadow-xs"
+                className="py-1 px-2.5 rounded-full bg-rose-600 text-white text-[10px] font-bold shadow-2xs"
               >
                 Ajustes
               </button>
@@ -216,12 +214,12 @@ export const App: React.FC = () => {
 
         {/* Loading Skeleton */}
         {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-24 space-y-3">
-            <div className="w-12 h-12 rounded-full border-4 border-[#A8D5BA] border-t-[#2D2926] animate-spin" />
-            <p className="text-xs font-black text-[#242220] tracking-wide">
+          <div className="flex-1 flex flex-col items-center justify-center py-24 space-y-4">
+            <div className="w-12 h-12 rounded-full border-3 border-purple-200 border-t-[#8B5CF6] animate-spin" />
+            <p className="text-xs font-black text-[#1E1238] tracking-wide">
               Cargando tu biblioteca y progreso...
             </p>
-            <p className="text-[11px] text-[#7A746E]">
+            <p className="text-[11px] text-[#6B7280]">
               Conectando con el servidor en la nube
             </p>
           </div>
@@ -236,6 +234,9 @@ export const App: React.FC = () => {
                 onSelectManga={handleSelectManga}
                 onOpenSyncModal={() => setIsSyncModalOpen(true)}
                 onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+                onToggleFavorite={handleToggleFavorite}
+                onUpdateStatus={handleUpdateStatus}
               />
             )}
 
@@ -247,7 +248,14 @@ export const App: React.FC = () => {
               />
             )}
 
-            {currentTab === 'stats' && <StatisticsTab stats={stats} mangas={mangas} />}
+            {currentTab === 'stats' && (
+              <StatisticsTab
+                stats={stats}
+                mangas={mangas}
+                onToggleFavorite={handleToggleFavorite}
+                onUpdateStatus={handleUpdateStatus}
+              />
+            )}
           </main>
         )}
 

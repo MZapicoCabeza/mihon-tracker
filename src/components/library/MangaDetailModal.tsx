@@ -1,0 +1,229 @@
+import React from 'react';
+import { X, Calendar, Clock, BookOpen, Heart, Sparkles, CheckCircle2, PauseCircle, PlayCircle } from 'lucide-react';
+import { MangaItem, MangaStatus } from '../../types/tracker';
+import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
+
+interface MangaDetailModalProps {
+  manga: MangaItem | null;
+  onClose: () => void;
+  onToggleFavorite: (id: string) => void;
+  onUpdateStatus: (id: string, status: MangaStatus) => void;
+}
+
+export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
+  manga,
+  onClose,
+  onToggleFavorite,
+  onUpdateStatus,
+}) => {
+  if (!manga) return null;
+
+  const percentage = Math.min(
+    100,
+    Math.round((manga.currentChapter / (manga.totalChapters || 1)) * 100)
+  );
+
+  const formattedStarted = manga.startedAt
+    ? new Date(manga.startedAt).toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : 'No registrado';
+
+  const years = Math.floor((manga.readingMonths || 0) / 12);
+  const remainingMonths = (manga.readingMonths || 0) % 12;
+  let durationText = `${manga.readingMonths || 0} meses`;
+  if (years > 0) {
+    durationText = remainingMonths > 0 ? `${years} años y ${remainingMonths} meses` : `${years} años`;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1E1238]/60 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-md bg-white/95 rounded-3xl p-6 shadow-2xl border border-purple-100 max-h-[90vh] overflow-y-auto no-scrollbar space-y-5">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-full bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238] transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Top Header with Cover */}
+        <div className="flex gap-4 items-start">
+          <div className="w-24 h-36 rounded-2xl overflow-hidden flex-shrink-0 shadow-md border border-purple-100 bg-[#F3EFFC] relative">
+            {manga.coverUrl ? (
+              <img src={manga.coverUrl} alt={manga.title} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-3xl">📖</div>
+            )}
+            <button
+              onClick={() => onToggleFavorite(manga.id)}
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 shadow-sm"
+            >
+              <Heart
+                className={`w-4 h-4 ${
+                  manga.isFavorite ? 'fill-[#EC4899] text-[#EC4899]' : 'text-gray-400'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex-1 min-w-0 pr-6">
+            <span className="text-[10px] font-black text-[#7C3AED] bg-[#F3E8FF] px-2.5 py-0.5 rounded-full uppercase tracking-wider inline-block mb-1.5">
+              Ficha del Manga
+            </span>
+            <h2 className="text-base font-black text-[#1E1238] leading-snug line-clamp-2">
+              {manga.title}
+            </h2>
+            {manga.author && (
+              <p className="text-xs font-semibold text-[#6B7280] truncate mt-1">
+                {manga.author}
+              </p>
+            )}
+
+            {/* Status pills */}
+            <div className="flex items-center gap-2 mt-2.5">
+              <span className="text-[11px] font-black font-mono text-[#7C3AED] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
+                {percentage}%
+              </span>
+              <span className="text-[11px] font-bold text-[#6B7280] bg-[#FAF5FF] px-2 py-0.5 rounded-full capitalize">
+                {manga.status === 'reading' ? 'Leyendo' : manga.status === 'completed' ? 'Completado' : 'Pausado'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Reading Duration Highlight Box */}
+        {(manga.readingMonths || 0) > 0 && (
+          <div className="bg-gradient-to-r from-[#F5F3FF] to-[#FDF4FF] border border-[#E9D5FF] rounded-2xl p-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-white shadow-xs flex items-center justify-center text-lg">
+                ⏱️
+              </div>
+              <div>
+                <span className="text-[10px] font-extrabold text-[#7C3AED] uppercase tracking-wider block">
+                  Antigüedad de Lectura
+                </span>
+                <span className="text-sm font-black text-[#1E1238]">
+                  Llevas {durationText}
+                </span>
+              </div>
+            </div>
+            <span className="text-[10px] font-black text-[#EC4899] bg-white px-2 py-1 rounded-xl shadow-xs">
+              Fidelidad
+            </span>
+          </div>
+        )}
+
+        {/* Detailed Metrics Grid */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="p-3 rounded-2xl bg-[#F7F5FC] border border-[#E9D5FF]/60">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6B7280] uppercase">
+              <Calendar className="w-3.5 h-3.5 text-[#7C3AED]" />
+              <span>Iniciado</span>
+            </div>
+            <div className="text-xs font-black text-[#1E1238] mt-1 truncate">
+              {formattedStarted}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-[#F7F5FC] border border-[#E9D5FF]/60">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6B7280] uppercase">
+              <Clock className="w-3.5 h-3.5 text-[#EC4899]" />
+              <span>Última Lectura</span>
+            </div>
+            <div className="text-xs font-black text-[#1E1238] mt-1 truncate">
+              {formatRelativeTimeSpanish(manga.lastReadAt)}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-[#F7F5FC] border border-[#E9D5FF]/60">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6B7280] uppercase">
+              <BookOpen className="w-3.5 h-3.5 text-[#F59E0B]" />
+              <span>Progreso Actual</span>
+            </div>
+            <div className="text-xs font-black text-[#1E1238] mt-1">
+              Cap. {manga.currentChapter} de {manga.totalChapters}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-[#F7F5FC] border border-[#E9D5FF]/60">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6B7280] uppercase">
+              <Sparkles className="w-3.5 h-3.5 text-[#10B981]" />
+              <span>Restantes</span>
+            </div>
+            <div className="text-xs font-black text-[#1E1238] mt-1">
+              {Math.max(0, manga.totalChapters - manga.currentChapter)} caps por leer
+            </div>
+          </div>
+        </div>
+
+        {/* Visual Progress Bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-bold text-[#6B7280]">
+            <span>Avance general:</span>
+            <span className="font-black text-[#7C3AED]">{percentage}% completado</span>
+          </div>
+          <div className="w-full h-3 rounded-full bg-[#EDE9FE] overflow-hidden p-0.5">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] transition-all duration-500"
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Genres */}
+        <div>
+          <span className="text-[10px] font-extrabold text-[#6B7280] uppercase tracking-wider block mb-2">
+            Géneros & Etiquetas
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {manga.genres.map((g) => (
+              <span
+                key={g}
+                className="text-[11px] font-bold text-[#6D28D9] bg-[#F3E8FF] px-3 py-1 rounded-full"
+              >
+                {g}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Status Actions */}
+        <div className="pt-2 border-t border-[#F3E8FF] flex items-center justify-between gap-2">
+          <button
+            onClick={() => onUpdateStatus(manga.id, 'reading')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+              manga.status === 'reading'
+                ? 'bg-[#7C3AED] text-white shadow-xs'
+                : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
+            }`}
+          >
+            <PlayCircle className="w-4 h-4" /> Leyendo
+          </button>
+          <button
+            onClick={() => onUpdateStatus(manga.id, 'completed')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+              manga.status === 'completed'
+                ? 'bg-[#10B981] text-white shadow-xs'
+                : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4" /> Terminado
+          </button>
+          <button
+            onClick={() => onUpdateStatus(manga.id, 'paused')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+              manga.status === 'paused'
+                ? 'bg-[#F59E0B] text-white shadow-xs'
+                : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
+            }`}
+          >
+            <PauseCircle className="w-4 h-4" /> Pausa
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

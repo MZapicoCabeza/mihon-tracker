@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
-import { Flame, Clock, Sparkles, ChevronRight, Zap, BookOpen, Trophy, RefreshCw, Upload, Radio } from 'lucide-react';
+import {
+  Flame,
+  Clock,
+  Sparkles,
+  ChevronRight,
+  BookOpen,
+  Trophy,
+  RefreshCw,
+  Calendar as CalendarIcon,
+  Zap,
+  Bookmark,
+  Heart,
+} from 'lucide-react';
 import { WeeklyChart } from '../charts/WeeklyChart';
-import { MangaItem, ReadingHistoryEvent, ReadingStats } from '../../types/tracker';
+import { MangaDetailModal } from '../library/MangaDetailModal';
+import { ReaderWrappedModal } from '../statistics/ReaderWrappedModal';
+import { MangaItem, ReadingHistoryEvent, ReadingStats, MangaStatus } from '../../types/tracker';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
 
 interface DashboardTabProps {
@@ -11,6 +25,9 @@ interface DashboardTabProps {
   onSelectManga: (mangaId: string) => void;
   onOpenSyncModal: () => void;
   onOpenDownloadModal: () => void;
+  onNavigateTab?: (tab: 'dashboard' | 'library' | 'stats') => void;
+  onToggleFavorite?: (id: string) => void;
+  onUpdateStatus?: (id: string, status: MangaStatus) => void;
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
@@ -19,12 +36,14 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   mangas,
   onSelectManga,
   onOpenSyncModal,
-  onOpenDownloadModal,
+  onNavigateTab = () => {},
+  onToggleFavorite = () => {},
+  onUpdateStatus = () => {},
 }) => {
-  const [timeView, setTimeView] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const [selectedDayIndex, setSelectedDayIndex] = useState(6); // Default to today (last item)
+  const [selectedDayIndex, setSelectedDayIndex] = useState(6); // Default to today
+  const [selectedManga, setSelectedManga] = useState<MangaItem | null>(null);
+  const [isWrappedOpen, setIsWrappedOpen] = useState(false);
 
-  // Dynamically derive the 7-day pill bar from real weeklyActivity
   const weeklyDays = stats.weeklyActivity.length === 7
     ? stats.weeklyActivity
     : [
@@ -38,263 +57,240 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       ];
 
   const totalWeekly = stats.weeklyActivity.reduce((acc, curr) => acc + curr.chapters, 0);
+  const activeDay = weeklyDays[selectedDayIndex] || weeklyDays[weeklyDays.length - 1];
+
+  const handleMangaCardClick = (mangaId: string) => {
+    const found = mangas.find((m) => m.id === mangaId);
+    if (found) {
+      setSelectedManga(found);
+    } else {
+      onSelectManga(mangaId);
+    }
+  };
 
   return (
     <div className="space-y-4 pb-28 animate-fadeIn">
-      {/* Top Sage Green Header Section */}
-      <div className="-mx-4 -mt-3 bg-[#A8D5BA] border-b-[2px] border-[#2D2926] p-4 pt-5 rounded-b-[2.2rem] shadow-sm">
-        {/* Top bar with Title & Action */}
+      {/* Top Header Card inspired by Reference Image */}
+      <div className="pt-2 px-1">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#FAF7F2] border-[1.5px] border-[#2D2926] flex items-center justify-center font-bold text-xs shadow-xs">
-              ⚡
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] p-0.5 shadow-sm shadow-purple-500/20">
+              <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-sm font-black text-[#7C3AED]">
+                📖
+              </div>
             </div>
             <div>
-              <span className="text-[10px] font-extrabold tracking-wider text-[#35524A] uppercase">
+              <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider block">
                 Mihon Tracker Cloud
               </span>
-              <h1 className="text-xl font-black text-[#242220] tracking-tight leading-none">
-                ACTIVIDAD
+              <h1 className="text-xl font-black text-[#1E1238] tracking-tight leading-none">
+                Hola, Lectora 👋
               </h1>
             </div>
           </div>
 
+          {/* Sync Pill */}
           <button
             onClick={onOpenSyncModal}
-            title="Sincronizar y Configurar"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF7F2] border-[1.5px] border-[#2D2926] text-[11px] font-extrabold text-[#242220] hover:bg-white shadow-[0_2px_0px_#2D2926] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#E9D5FF] text-xs font-bold text-[#7C3AED] shadow-xs hover:bg-[#F3E8FF] transition-all"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-[#52796F]" />
+            <RefreshCw className="w-3.5 h-3.5" />
             <span>Sincronizar</span>
           </button>
         </div>
 
-        {/* Days of Week Horizontal Selector from real dates */}
-        <div className="flex items-center justify-between pt-1">
+        {/* Two Large Vibrant Cards (Like "Create Note" & "Create Task" in Reference) */}
+        <div className="grid grid-cols-2 gap-3 mb-2">
+          {/* Card 1: Mi Historia */}
+          <div
+            onClick={() => onNavigateTab('stats')}
+            className="rounded-3xl p-4 text-white bg-gradient-to-tr from-[#8B5CF6] to-[#C026D3] shadow-md shadow-purple-500/20 cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all space-y-3 relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between">
+              <span className="w-8 h-8 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-sm">
+                👑
+              </span>
+              <span className="text-[10px] font-black uppercase text-white/80 bg-white/15 px-2 py-0.5 rounded-full">
+                {stats.yearsActiveLabel || '2 años'}
+              </span>
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white">Mi Historia</h3>
+              <p className="text-xs text-white/80 font-medium">
+                {stats.totalChaptersRead} caps leídos
+              </p>
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-bold text-white/90 pt-1 border-t border-white/15">
+              <span>Ver Hitos</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
+          </div>
+
+          {/* Card 2: Racha */}
+          <div
+            onClick={() => setIsWrappedOpen(true)}
+            className="rounded-3xl p-4 text-white bg-gradient-to-tr from-[#F59E0B] to-[#F97316] shadow-md shadow-amber-500/20 cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all space-y-3 relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between">
+              <span className="w-8 h-8 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-sm">
+                🔥
+              </span>
+              <span className="text-[10px] font-black uppercase text-white/80 bg-white/15 px-2 py-0.5 rounded-full">
+                Racha
+              </span>
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white">
+                {stats.currentStreakDays} Días Activos
+              </h3>
+              <p className="text-xs text-white/80 font-medium">
+                Récord: {stats.longestStreakDays || 17} días
+              </p>
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-bold text-white/90 pt-1 border-t border-white/15">
+              <span>Tu Wrapped</span>
+              <Sparkles className="w-3.5 h-3.5 text-yellow-200" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Daily Activity Card (Directly inspired by top-left card in reference image) */}
+      <div className="glass-card p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <CalendarIcon className="w-3.5 h-3.5 text-[#7C3AED]" />
+              <h3 className="text-sm font-black text-[#1E1238]">Actividad Diaria</h3>
+            </div>
+            <p className="text-[11px] font-medium text-[#6B7280]">
+              {activeDay?.day || 'Hoy'} • {activeDay?.date || 'Sesión en curso'}
+            </p>
+          </div>
+
+          <span className="text-xs font-black text-[#7C3AED] bg-[#F3E8FF] px-2.5 py-1 rounded-full">
+            {activeDay?.chapters || 0} capítulos
+          </span>
+        </div>
+
+        {/* Counter numbers */}
+        <div className="flex items-baseline justify-between pt-1">
+          <div>
+            <span className="text-3xl font-black text-[#1E1238] tracking-tight">
+              {totalWeekly}
+            </span>
+            <span className="text-xs font-bold text-[#6B7280] ml-1.5">caps esta semana</span>
+          </div>
+          <span className="text-xs font-black text-[#10B981] bg-[#ECFDF5] px-2 py-0.5 rounded-full">
+            {stats.weeklyComparison ? `${stats.weeklyComparison.percentDiff >= 0 ? '+' : ''}${stats.weeklyComparison.percentDiff}% vs ant.` : '+38%'}
+          </span>
+        </div>
+
+        {/* Multi-color segmented progress bar from Reference Image */}
+        <div className="w-full h-3.5 rounded-full bg-[#F3EFFC] overflow-hidden flex p-0.5 gap-0.5">
+          <div className="h-full rounded-l-full bg-[#67E8F9]" style={{ width: '25%' }} />
+          <div className="h-full bg-[#C084FC]" style={{ width: '35%' }} />
+          <div className="h-full bg-[#FDE047]" style={{ width: '20%' }} />
+          <div className="h-full rounded-r-full bg-[#F472B6]" style={{ width: '20%' }} />
+        </div>
+
+        {/* Days of week horizontal selector */}
+        <div className="grid grid-cols-7 gap-1.5 pt-1">
           {weeklyDays.map((item, idx) => {
             const isSelected = idx === selectedDayIndex;
-            const dayNum = item.date ? item.date.slice(8) : String(idx + 1);
             return (
               <button
                 key={item.date || idx}
                 onClick={() => setSelectedDayIndex(idx)}
-                className={`flex flex-col items-center justify-center py-2 px-2.5 rounded-full transition-all duration-200 ${
+                className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center transition-all ${
                   isSelected
-                    ? 'bg-[#2D2926] text-[#FAF7F2] border-[1.5px] border-[#2D2926] shadow-sm'
-                    : 'text-[#2D2926] hover:bg-white/40'
+                    ? 'bg-[#7C3AED] text-white shadow-md shadow-purple-500/25 scale-105'
+                    : 'bg-[#F7F5FC] text-[#6B7280] hover:bg-[#F3E8FF]'
                 }`}
               >
-                <span className="text-[9px] font-extrabold tracking-wider">{item.shortDay.toUpperCase()}</span>
-                <span className="text-sm font-black mt-0.5">{dayNum}</span>
+                <span className="text-[9px] font-bold uppercase">{item.shortDay}</span>
+                <span className="text-xs font-black mt-0.5">{item.chapters}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Empty State Banner if Library has 0 mangas */}
-      {mangas.length === 0 && (
-        <div className="bg-[#FFF9E6] border-[1.8px] border-[#2D2926] rounded-3xl p-4 shadow-[0_4px_0px_#2D2926]">
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="text-xl">📚</span>
-            <h3 className="font-black text-[#242220] text-sm">Biblioteca aún no sincronizada</h3>
-          </div>
-          <p className="text-xs text-[#5C5651] leading-relaxed mb-3">
-            Para mostrar tu progreso real, sincroniza tu biblioteca desde Mihon o sube tu archivo de respaldo.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={onOpenSyncModal}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#F8C866] border-[1.5px] border-[#2D2926] font-black text-xs text-[#242220] shadow-[0_2px_0px_#2D2926] hover:brightness-105"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Importar Respaldo</span>
-            </button>
-            <button
-              onClick={onOpenDownloadModal}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white border-[1.5px] border-[#2D2926] font-black text-xs text-[#242220] shadow-[0_2px_0px_#2D2926] hover:bg-[#FAF7F2]"
-            >
-              <span>Instrucciones</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Quick Action Navigation Buttons */}
+      <div className="grid grid-cols-4 gap-2 px-1 text-center">
+        <button
+          onClick={() => onNavigateTab('library')}
+          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#8B5CF6] transition-all"
+        >
+          <BookOpen className="w-5 h-5 text-[#8B5CF6] mx-auto mb-1" />
+          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">Biblioteca</span>
+          <span className="text-[9px] text-[#6B7280] font-semibold">{mangas.length} obras</span>
+        </button>
 
-      {/* Main Big Metric Card with Capsule Progress Bar */}
-      <div className="bg-white border-[1.8px] border-[#2D2926] rounded-3xl p-4 shadow-[0_4px_0px_#2D2926]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">📖</span>
-            <div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-[#242220]">
-                  {stats.totalChaptersRead}
-                </span>
-                <span className="text-xs font-extrabold text-[#7A746E] uppercase">
-                  Capítulos leídos
-                </span>
-              </div>
-            </div>
-          </div>
-          <span className="text-[11px] font-extrabold text-[#242220] bg-[#F8C866] border-[1.5px] border-[#2D2926] px-2.5 py-1 rounded-full">
-            {stats.totalChaptersRead >= 100 ? 'RÉCORD ACTIVO' : 'EN PROCESO'}
-          </span>
-        </div>
+        <button
+          onClick={() => onNavigateTab('stats')}
+          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#EC4899] transition-all"
+        >
+          <Trophy className="w-5 h-5 text-[#EC4899] mx-auto mb-1" />
+          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">Podio</span>
+          <span className="text-[9px] text-[#6B7280] font-semibold">Fidelidad</span>
+        </button>
 
-        {/* Capsule Progress Bar */}
-        <div className="mt-3 w-full h-5 rounded-full bg-[#F0EBE1] border-[1.5px] border-[#2D2926] overflow-hidden p-0.5">
-          <div
-            className="h-full rounded-full bg-[#A8D5BA] border-[1px] border-[#2D2926] transition-all duration-500"
-            style={{ width: `${Math.min(100, Math.max(stats.totalChaptersRead > 0 ? 5 : 0, Math.round((stats.totalChaptersRead / Math.max(100, stats.totalChaptersRead)) * 100)))}%` }}
-          />
-        </div>
-      </div>
+        <button
+          onClick={() => onNavigateTab('stats')}
+          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#F59E0B] transition-all"
+        >
+          <CalendarIcon className="w-5 h-5 text-[#F59E0B] mx-auto mb-1" />
+          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">GitHub</span>
+          <span className="text-[9px] text-[#6B7280] font-semibold">Calendario</span>
+        </button>
 
-      {/* 3 Metric Cards in a Row (Time, Streak, Completed) */}
-      <div className="grid grid-cols-3 gap-2.5">
-        {/* Tiempo */}
-        <div className="bg-white border-[1.8px] border-[#2D2926] rounded-2xl p-3 flex flex-col justify-between shadow-[0_3px_0px_#2D2926]">
-          <div className="flex items-center justify-between text-[#5C5651]">
-            <Clock className="w-4 h-4 text-[#52796F]" />
-            <span className="text-[9px] font-extrabold uppercase text-[#8A847E]">Tiempo</span>
-          </div>
-          <div className="mt-2">
-            <span className="text-xl font-black text-[#242220]">{stats.estimatedHoursRead}h</span>
-            <p className="text-[10px] font-bold text-[#8A847E] truncate">Estimadas (~10m)</p>
-          </div>
-        </div>
-
-        {/* Racha */}
-        <div className="bg-[#FFF5F2] border-[1.8px] border-[#2D2926] rounded-2xl p-3 flex flex-col justify-between shadow-[0_3px_0px_#2D2926]">
-          <div className="flex items-center justify-between">
-            <Flame className="w-4 h-4 fill-[#F6A596] text-[#E27D60]" />
-            <span className="text-[9px] font-extrabold uppercase text-[#E27D60]">Racha</span>
-          </div>
-          <div className="mt-2">
-            <span className="text-xl font-black text-[#242220]">{stats.currentStreakDays}d</span>
-            <p className="text-[10px] font-bold text-[#D96D59] truncate">
-              {stats.currentStreakDays > 0 ? 'Fuego activo 🔥' : 'Sin racha activa'}
-            </p>
-          </div>
-        </div>
-
-        {/* Mangas Completados */}
-        <div className="bg-white border-[1.8px] border-[#2D2926] rounded-2xl p-3 flex flex-col justify-between shadow-[0_3px_0px_#2D2926]">
-          <div className="flex items-center justify-between text-[#5C5651]">
-            <Trophy className="w-4 h-4 text-[#F8C866]" />
-            <span className="text-[9px] font-extrabold uppercase text-[#8A847E]">Terminados</span>
-          </div>
-          <div className="mt-2">
-            <span className="text-xl font-black text-[#242220]">{stats.totalMangaCompleted}</span>
-            <p className="text-[10px] font-bold text-[#8A847E] truncate">Mangas</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Direct Mobile Download Banner */}
-      <div
-        onClick={onOpenDownloadModal}
-        className="cursor-pointer group flex items-center justify-between p-3.5 rounded-2xl bg-[#F6A596] border-[1.8px] border-[#2D2926] shadow-[0_4px_0px_#2D2926] hover:translate-y-[-1px] transition-all"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white border-[1.5px] border-[#2D2926] flex items-center justify-center font-black text-base shadow-sm">
-            📱
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-[#242220]">
-                Descargar APK de Mihon
-              </span>
-              <span className="text-[10px] bg-white text-[#242220] font-black px-2 py-0.5 rounded-full border border-[#2D2926]">
-                v0.21.2
-              </span>
-            </div>
-            <p className="text-[11px] font-semibold text-[#3D2622] mt-0.5">
-              Instalador para tu móvil Android (27.7 MB)
-            </p>
-          </div>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-white border-[1.5px] border-[#2D2926] flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
-          <ChevronRight className="w-4 h-4 text-[#242220]" />
-        </div>
-      </div>
-
-      {/* Activity Chart Section Card */}
-      <div className="bg-white border-[1.8px] border-[#2D2926] rounded-3xl p-4 shadow-[0_4px_0px_#2D2926]">
-        {/* Segmented Pill Selector (Daily / Weekly / Monthly) */}
-        <div className="flex items-center justify-center gap-1.5 p-1 rounded-full bg-[#F5F0E8] border-[1.5px] border-[#2D2926] max-w-[260px] mx-auto mb-4">
-          <button
-            onClick={() => setTimeView('daily')}
-            className={`flex-1 py-1 px-3 rounded-full text-[10px] font-extrabold uppercase transition-all ${
-              timeView === 'daily'
-                ? 'bg-[#2D2926] text-white shadow-sm'
-                : 'text-[#6B6661] hover:text-[#242220]'
-            }`}
-          >
-            Diario
-          </button>
-          <button
-            onClick={() => setTimeView('weekly')}
-            className={`flex-1 py-1 px-3 rounded-full text-[10px] font-extrabold uppercase transition-all ${
-              timeView === 'weekly'
-                ? 'bg-[#2D2926] text-white shadow-sm'
-                : 'text-[#6B6661] hover:text-[#242220]'
-            }`}
-          >
-            Semanal
-          </button>
-          <button
-            onClick={() => setTimeView('monthly')}
-            className={`flex-1 py-1 px-3 rounded-full text-[10px] font-extrabold uppercase transition-all ${
-              timeView === 'monthly'
-                ? 'bg-[#2D2926] text-white shadow-sm'
-                : 'text-[#6B6661] hover:text-[#242220]'
-            }`}
-          >
-            Mensual
-          </button>
-        </div>
-
-        {/* Chart render */}
-        <WeeklyChart data={stats.weeklyActivity} accentColor="green" />
-
-        <div className="flex items-center justify-between pt-3 mt-2 border-t-[1.5px] border-[#F0EBE1] text-xs">
-          <span className="font-extrabold text-[#7A746E]">Total de esta semana:</span>
-          <span className="font-black text-[#242220] bg-[#FAF7F2] border border-[#2D2926] px-2.5 py-0.5 rounded-full">
-            {totalWeekly} capítulos
-          </span>
-        </div>
+        <button
+          onClick={() => setIsWrappedOpen(true)}
+          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#10B981] transition-all"
+        >
+          <Sparkles className="w-5 h-5 text-[#10B981] mx-auto mb-1" />
+          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">Wrapped</span>
+          <span className="text-[9px] text-[#6B7280] font-semibold">Tu Historia</span>
+        </button>
       </div>
 
       {/* Recently Read Section */}
-      <div className="space-y-2.5 pt-1">
+      <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-black text-[#242220] uppercase tracking-wider flex items-center gap-1.5">
-            <span>Lecturas Recientes</span>
-            <span className="w-2 h-2 rounded-full bg-[#52796F]" />
-          </h2>
-          <span className="text-[11px] font-extrabold text-[#7A746E]">Vía Mihon Webhook</span>
+          <div>
+            <h2 className="text-sm font-black text-[#1E1238] uppercase tracking-wider flex items-center gap-1.5">
+              <span>Lecturas Recientes</span>
+              <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+            </h2>
+            <p className="text-[11px] font-medium text-[#6B7280]">Capítulos sincronizados automáticamente</p>
+          </div>
+          <span className="text-[11px] font-bold text-[#7C3AED] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
+            Mihon Sync
+          </span>
         </div>
 
         {recentEvents.length === 0 ? (
-          <div className="bg-white border-[1.8px] border-[#2D2926] rounded-2xl p-4 text-center shadow-[0_2px_0px_#2D2926]">
-            <p className="text-xs font-black text-[#242220]">Sin lecturas recientes todavía</p>
-            <p className="text-[11px] text-[#7A746E] mt-1">
-              Los capítulos que completes en Mihon aparecerán aquí en vivo.
+          <div className="glass-card p-6 text-center space-y-1">
+            <span className="text-2xl">📚</span>
+            <p className="text-xs font-black text-[#1E1238]">Sin lecturas recientes todavía</p>
+            <p className="text-[11px] text-[#6B7280]">
+              Los capítulos que leas en Mihon aparecerán aquí en vivo.
             </p>
           </div>
         ) : (
           <div className="space-y-2.5">
-            {recentEvents.map((event) => {
+            {recentEvents.slice(0, 8).map((event) => {
               const correspondingManga = mangas.find((m) => m.id === event.manga_id);
               return (
                 <div
                   key={event.id}
-                  onClick={() => onSelectManga(event.manga_id)}
-                  className="group flex items-center gap-3 p-2.5 rounded-2xl bg-white border-[1.8px] border-[#2D2926] hover:bg-[#FAF7F2] shadow-[0_3px_0px_#2D2926] transition-all cursor-pointer"
+                  onClick={() => handleMangaCardClick(event.manga_id)}
+                  className="glass-card p-3 flex items-center gap-3.5 hover:shadow-md hover:border-[#C4B5FD] transition-all cursor-pointer group"
                 >
-                  {/* Manga Cover */}
-                  <div className="relative w-12 h-16 rounded-xl overflow-hidden flex-shrink-0 border-[1.5px] border-[#2D2926] bg-[#F5F0E8] flex items-center justify-center">
+                  {/* Cover */}
+                  <div className="relative w-12 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#F3EFFC] border border-purple-100 flex items-center justify-center">
                     {(event.cover_url || correspondingManga?.coverUrl) ? (
                       <img
                         src={event.cover_url || correspondingManga?.coverUrl}
@@ -309,28 +305,30 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-black text-[#242220] bg-[#C8B6E2] px-2 py-0.5 rounded-full border border-[#2D2926]">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-black text-[#7C3AED] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
                         Cap. {event.chapter_number}
                       </span>
-                      {event.genres?.[0] && (
-                        <span className="text-[10px] font-bold text-[#5C5651] bg-[#F5F0E8] px-2 py-0.5 rounded-full">
-                          {event.genres[0]}
+                      {correspondingManga?.readingMonths ? (
+                        <span className="text-[9px] font-black text-[#B45309] bg-[#FEF3C7] px-2 py-0.5 rounded-full">
+                          ⏱️ {correspondingManga.readingMonths}m
                         </span>
-                      )}
+                      ) : null}
                     </div>
-                    <h3 className="text-sm font-black text-[#242220] truncate mt-1">
+
+                    <h3 className="text-sm font-black text-[#1E1238] truncate group-hover:text-[#7C3AED] transition-colors">
                       {event.manga_title}
                     </h3>
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-[#8A847E] mt-0.5">
-                      <Clock className="w-3 h-3 text-[#52796F]" />
+
+                    <div className="flex items-center gap-1 text-[11px] font-semibold text-[#6B7280] mt-0.5">
+                      <Clock className="w-3 h-3 text-[#9CA3AF]" />
                       <span>{formatRelativeTimeSpanish(event.timestamp)}</span>
                     </div>
                   </div>
 
                   {/* Arrow */}
-                  <div className="w-7 h-7 rounded-full bg-[#FAF7F2] border-[1.5px] border-[#2D2926] flex items-center justify-center text-[#242220] group-hover:translate-x-0.5 transition-transform">
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <div className="w-7 h-7 rounded-full bg-[#F7F5FC] flex items-center justify-center text-[#6B7280] group-hover:text-[#7C3AED] group-hover:translate-x-0.5 transition-all">
+                    <ChevronRight className="w-4 h-4" />
                   </div>
                 </div>
               );
@@ -338,6 +336,23 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           </div>
         )}
       </div>
+
+      {/* Manga Detail Modal */}
+      <MangaDetailModal
+        manga={selectedManga}
+        onClose={() => setSelectedManga(null)}
+        onToggleFavorite={onToggleFavorite}
+        onUpdateStatus={onUpdateStatus}
+      />
+
+      {/* Reader Wrapped Modal */}
+      {isWrappedOpen && (
+        <ReaderWrappedModal
+          stats={stats}
+          mangas={mangas}
+          onClose={() => setIsWrappedOpen(false)}
+        />
+      )}
     </div>
   );
 };

@@ -40,11 +40,57 @@ export interface ReadingStats {
   totalMangaReading?: number;
   totalMangaInLibrary?: number;
   currentStreakDays: number;
+  longestStreakDays?: number;
+  distinctActiveDays?: number;
+  earliestReadDate?: string;
+  latestReadDate?: string;
+  yearsActiveLabel?: string;
   mostActiveDay: string;
   mostActiveDayAvg: number;
   favoriteReadingTime: string;
   weeklyActivity: { day: string; shortDay: string; chapters: number; date: string }[];
   monthlyActivity: { month: string; shortMonth: string; chapters: number }[];
   genreDistribution: { genre: string; count: number; percentage: number; color: string }[];
+  weeklyComparison?: {
+    thisWeek: number;
+    prevWeek: number;
+    percentDiff: number;
+    dailyAverage: string;
+  };
+  monthlyComparison?: {
+    thisMonth: number;
+    prevMonth: number;
+    percentDiff: number;
+    dailyAverage: string;
+  };
+  recordDay?: {
+    date: string;
+    chapters: number;
+  };
+  recordMonth?: {
+    month: string;
+    chapters: number;
+  };
+  timelineByYear?: {
+    year: string;
+    chapters: number;
+    series: number;
+  }[];
+  heatmapData?: Record<string, number>;
+  habits?: {
+    totalSessions: number;
+    avgChaptersPerSession: string;
+    marathons: { manga_id: string; manga_title: string; read_date: string; chapters: number }[];
+    retakenSeries: { id: string; title: string; cover_url: string; reading_months: number; chapters: number; first_read: string; last_read: string }[];
+  };
+  libraryOverview?: {
+    reading: number;
+    completed: number;
+    paused: number;
+    totalMangas: number;
+    totalReadChapters: number;
+    totalAvailableChapters: number;
+    libraryCompletionRate: number;
+  };
   lastSyncAt?: string | null;
 }

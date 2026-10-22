@@ -116,37 +116,37 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#242220]/60 backdrop-blur-xs animate-fadeIn">
-      <div className="w-full max-w-sm bg-[#FAF7F2] border-[2px] border-[#2D2926] rounded-3xl p-5 shadow-[0_8px_0px_#2D2926] flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1E1238]/60 backdrop-blur-md animate-fadeIn">
+      <div className="w-full max-w-sm bg-white/95 border border-purple-100 rounded-3xl p-5 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden space-y-3">
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-3 border-b-[1.5px] border-[#2D2926]/15">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#A8D5BA] border-[1.5px] border-[#2D2926] flex items-center justify-center font-bold text-sm">
+        <div className="flex items-center justify-between pb-3 border-b border-[#F3E8FF]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-[#F3E8FF] flex items-center justify-center font-bold text-base text-[#7C3AED]">
               ⚙️
             </div>
             <div>
-              <h3 className="text-base font-black text-[#242220] leading-none">
-                Sincronización & Conexión
+              <h3 className="text-base font-black text-[#1E1238] leading-none">
+                Sincronización Cloud
               </h3>
-              <p className="text-[10px] font-bold text-[#7A746E] mt-0.5">
+              <p className="text-[10px] font-semibold text-[#6B7280] mt-0.5">
                 Mihon Tracker Cloud & Respaldo
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full bg-white border-[1.5px] border-[#2D2926] flex items-center justify-center hover:bg-[#F6A596] transition-colors"
+            className="w-7 h-7 rounded-full bg-[#F3EFFC] flex items-center justify-center text-[#6B7280] hover:text-[#1E1238] transition-colors"
           >
-            <X className="w-4 h-4 text-[#242220]" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex gap-1.5 p-1 bg-[#EFE9DF] rounded-2xl border-[1.5px] border-[#2D2926] my-3">
+        <div className="flex gap-1.5 p-1 bg-[#F3EFFC] rounded-2xl border border-purple-100/60 my-1">
           <button
             onClick={() => setActiveTab('sync')}
             className={`flex-1 py-1.5 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'sync' ? 'bg-white text-[#242220] shadow-sm' : 'text-[#7A746E]'
+              activeTab === 'sync' ? 'bg-white text-[#7C3AED] shadow-xs' : 'text-[#6B7280]'
             }`}
           >
             Sincronizar
@@ -154,7 +154,7 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
           <button
             onClick={() => setActiveTab('server')}
             className={`flex-1 py-1.5 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'server' ? 'bg-white text-[#242220] shadow-sm' : 'text-[#7A746E]'
+              activeTab === 'server' ? 'bg-white text-[#7C3AED] shadow-xs' : 'text-[#6B7280]'
             }`}
           >
             Servidor
@@ -162,7 +162,7 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
           <button
             onClick={() => setActiveTab('dev')}
             className={`flex-1 py-1.5 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'dev' ? 'bg-white text-[#242220] shadow-sm' : 'text-[#7A746E]'
+              activeTab === 'dev' ? 'bg-white text-[#7C3AED] shadow-xs' : 'text-[#6B7280]'
             }`}
           >
             Pruebas
@@ -170,24 +170,24 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 text-xs">
+        <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 text-xs no-scrollbar">
           {activeTab === 'sync' && (
             <div className="space-y-3">
               {/* Cloud Sync Status */}
-              <div className="bg-white border-[1.8px] border-[#2D2926] rounded-2xl p-3 shadow-[0_2px_0px_#2D2926]">
+              <div className="bg-[#FAF9FE] border border-purple-100 rounded-2xl p-3.5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#A8D5BA] animate-pulse" />
-                    <span className="font-black text-[#242220]">Servidor Cloud en Vivo</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
+                    <span className="font-black text-[#1E1238]">Servidor Cloud en Vivo</span>
                   </div>
-                  <span className="text-[10px] font-bold text-[#7A746E]">
-                    {lastSyncAt ? `Última sinc: ${new Date(lastSyncAt).toLocaleTimeString()}` : 'Listo'}
+                  <span className="text-[10px] font-bold text-[#6B7280]">
+                    {lastSyncAt ? `Última: ${new Date(lastSyncAt).toLocaleTimeString()}` : 'Listo'}
                   </span>
                 </div>
                 <button
                   onClick={handleManualSync}
                   disabled={isSyncing}
-                  className="w-full mt-3 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-[#A8D5BA] border-[1.5px] border-[#2D2926] font-black text-[#242220] hover:brightness-105 transition-all shadow-[0_2px_0px_#2D2926]"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] font-black text-white hover:brightness-105 transition-all shadow-xs"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                   <span>{isSyncing ? 'Actualizando datos...' : 'Actualizar ahora'}</span>
@@ -195,18 +195,18 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
               </div>
 
               {/* Import Backup File (.tachibk or .json) */}
-              <div className="bg-[#FAF7F2] border-[1.8px] border-[#2D2926] rounded-2xl p-3 shadow-[0_2px_0px_#2D2926]">
+              <div className="bg-[#FAF9FE] border border-purple-100 rounded-2xl p-3.5 shadow-2xs">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <FileText className="w-4 h-4 text-[#52796F]" />
-                  <span className="font-black text-[#242220]">Importar Respaldo de Mihon</span>
+                  <FileText className="w-4 h-4 text-[#7C3AED]" />
+                  <span className="font-black text-[#1E1238]">Importar Respaldo de Mihon</span>
                 </div>
-                <p className="text-[11px] text-[#5C5651] leading-relaxed mb-3">
+                <p className="text-[11px] text-[#6B7280] leading-relaxed mb-3">
                   Sube tu archivo de respaldo de Mihon (<b>.tachibk</b> o <b>.json</b>) para importar toda tu biblioteca y progreso existente.
                 </p>
 
-                <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-[#F8C866] border-[1.5px] border-[#2D2926] font-black text-[#242220] cursor-pointer hover:brightness-105 shadow-[0_2px_0px_#2D2926] transition-all">
+                <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-[#E9D5FF] font-black text-[#7C3AED] cursor-pointer hover:bg-[#F3E8FF] shadow-2xs transition-all">
                   <Upload className="w-4 h-4" />
-                  <span>{isImporting ? 'Importando respaldo...' : 'Seleccionar archivo .tachibk / .json'}</span>
+                  <span>{isImporting ? 'Importando respaldo...' : 'Seleccionar .tachibk / .json'}</span>
                   <input
                     type="file"
                     accept="*/*"
@@ -218,10 +218,10 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
               </div>
 
               {/* Instructions on Mobile Sync */}
-              <div className="bg-white/80 border-[1.5px] border-[#2D2926]/30 rounded-2xl p-3 text-[11px] text-[#5C5651]">
-                <p className="font-extrabold text-[#242220] mb-1">📱 Sincronización Automática desde Mihon:</p>
+              <div className="bg-[#FAF5FF] border border-purple-100 rounded-2xl p-3 text-[11px] text-[#6B7280]">
+                <p className="font-extrabold text-[#7C3AED] mb-1">📱 Sincronización Automática desde Mihon:</p>
                 <p>
-                  Cada vez que lees un capítulo en tu Mihon modificado, el capítulo se sincroniza de forma automática en segundo plano con tu servidor en la nube.
+                  Cada vez que lees un capítulo en tu Mihon Sync, se envía automáticamente al backend en Render sin necesidad de respaldos manuales.
                 </p>
               </div>
             </div>
@@ -230,42 +230,42 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
           {activeTab === 'server' && (
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="text-[11px] font-black text-[#242220] flex items-center gap-1.5">
-                  <Server className="w-3.5 h-3.5 text-[#52796F]" /> URL del Backend
+                <label className="text-[11px] font-black text-[#1E1238] flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-[#7C3AED]" /> URL del Backend
                 </label>
                 <input
                   type="text"
                   value={serverUrl}
                   onChange={(e) => setServerUrl(e.target.value)}
                   placeholder="https://mihon-tracker.onrender.com"
-                  className="w-full px-3 py-2 rounded-xl bg-white border-[1.5px] border-[#2D2926] font-mono text-[11px] text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#A8D5BA]"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#E9D5FF] font-mono text-[11px] text-[#1E1238] focus:outline-none focus:border-[#7C3AED]"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-black text-[#242220] flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-[#E27D60]" /> Clave API (Opcional)
+                <label className="text-[11px] font-black text-[#1E1238] flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-[#EC4899]" /> Clave API (Opcional)
                 </label>
                 <input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Dejar vacío si no configuraste TRACKER_API_KEY"
-                  className="w-full px-3 py-2 rounded-xl bg-white border-[1.5px] border-[#2D2926] font-mono text-[11px] text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#A8D5BA]"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#E9D5FF] font-mono text-[11px] text-[#1E1238] focus:outline-none focus:border-[#7C3AED]"
                 />
               </div>
 
               {/* Status Message */}
               {connectionStatus === 'success' && (
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#E8F5E9] border-[1.5px] border-[#2D2926] text-[#2E7D32]">
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] text-[#047857]">
                   <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                  <span className="font-extrabold text-[11px]">{connectionMsg}</span>
+                  <span className="font-bold text-[11px]">{connectionMsg}</span>
                 </div>
               )}
               {connectionStatus === 'error' && (
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FFEBEE] border-[1.5px] border-[#2D2926] text-[#C62828]">
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span className="font-extrabold text-[11px]">{connectionMsg}</span>
+                  <span className="font-bold text-[11px]">{connectionMsg}</span>
                 </div>
               )}
 
@@ -273,13 +273,13 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
                 <button
                   onClick={handleTestConnection}
                   disabled={isTesting}
-                  className="flex-1 py-2 rounded-xl bg-white border-[1.5px] border-[#2D2926] font-black text-[#242220] hover:bg-[#FAF7F2] shadow-[0_2px_0px_#2D2926]"
+                  className="flex-1 py-2.5 rounded-xl bg-white border border-[#E9D5FF] font-black text-[#1E1238] hover:bg-[#FAF9FE] shadow-2xs"
                 >
                   {isTesting ? 'Probando...' : 'Probar conexión'}
                 </button>
                 <button
                   onClick={handleSaveServerConfig}
-                  className="flex-1 py-2 rounded-xl bg-[#A8D5BA] border-[1.5px] border-[#2D2926] font-black text-[#242220] hover:brightness-105 shadow-[0_2px_0px_#2D2926]"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] font-black text-white hover:brightness-105 shadow-2xs"
                 >
                   Guardar
                 </button>
@@ -289,38 +289,38 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
 
           {activeTab === 'dev' && (
             <div className="space-y-3">
-              <div className="bg-[#FFF9E6] border-[1.5px] border-[#2D2926] rounded-2xl p-3">
-                <div className="flex items-center gap-1.5 font-black text-[#856404] mb-1">
+              <div className="bg-[#FAF5FF] border border-purple-100 rounded-2xl p-3">
+                <div className="flex items-center gap-1.5 font-black text-[#7C3AED] mb-1">
                   <Terminal className="w-3.5 h-3.5" /> Entorno de Pruebas
                 </div>
-                <p className="text-[11px] text-[#5C5651] leading-relaxed">
+                <p className="text-[11px] text-[#6B7280] leading-relaxed">
                   Envía un webhook de prueba real a <b>POST /api/track</b> para comprobar que tu base de datos y la persistencia registran el capítulo.
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-black text-[#242220]">Título del Manga:</label>
+                <label className="text-[11px] font-black text-[#1E1238]">Título del Manga:</label>
                 <input
                   type="text"
                   value={simMangaTitle}
                   onChange={(e) => setSimMangaTitle(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-white border-[1.5px] border-[#2D2926] font-bold text-xs"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#E9D5FF] font-semibold text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-black text-[#242220]">Capítulo:</label>
+                <label className="text-[11px] font-black text-[#1E1238]">Capítulo:</label>
                 <input
                   type="number"
                   value={simChapter}
                   onChange={(e) => setSimChapter(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 rounded-xl bg-white border-[1.5px] border-[#2D2926] font-bold text-xs"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#E9D5FF] font-semibold text-xs"
                 />
               </div>
 
               <button
                 onClick={handleSimulateDevEvent}
-                className="w-full py-2.5 rounded-xl bg-[#F6A596] border-[1.5px] border-[#2D2926] font-black text-[#242220] shadow-[0_2px_0px_#2D2926] hover:brightness-105"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#EC4899] to-[#8B5CF6] font-black text-white shadow-xs hover:brightness-105"
               >
                 Enviar Evento de Prueba
               </button>
