@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const DB_FILE = process.env.DATABASE_PATH || process.env.DB_FILE || path.join(__dirname, 'tracker.db');
 const JSON_FALLBACK_FILE = path.join(__dirname, 'tracker-fallback.json');
 const MOCK_DB_FILE = path.join(__dirname, 'mock-db.json');
+const SEED_DATA_FILE = path.join(__dirname, 'seed-data.json');
 
 // Ensure directory exists
 const dbDir = path.dirname(DB_FILE);
@@ -102,6 +103,51 @@ export class TrackerDatabase {
     try {
       if (this.dbPath === ':memory:') return;
       const eventCount = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
+
+      // Primary: Seed full historical dataset (2023-2026) from seed-data.json if DB is empty or has mock data
+      if (eventCount < 100 && fs.existsSync(SEED_DATA_FILE)) {
+        console.log(`📦 [DB SEED] Seeding complete historical dataset (2023-2026) from seed-data.json...`);
+        const raw = fs.readFileSync(SEED_DATA_FILE, 'utf-8');
+        const data = JSON.parse(raw);
+
+        if (Array.isArray(data.mangas) && data.mangas.length > 0) {
+          this.upsertLibrary(data.mangas);
+        }
+
+        if (Array.isArray(data.events) && data.events.length > 0) {
+          this.db.exec('BEGIN TRANSACTION');
+          try {
+            const insertStmt = this.db.prepare(`
+              INSERT OR IGNORE INTO reading_events (
+                id, manga_id, manga_title, chapter_number, chapter_id,
+                cover_url, genres, timestamp, received_at, source, event_hash
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+
+            for (const ev of data.events) {
+              const mangaId = (ev.manga_id || ev.mangaId || '').toString();
+              const chapterNum = Number(ev.chapter_number ?? ev.chapterNumber ?? 0);
+              const timestamp = ev.timestamp || ev.received_at || new Date().toISOString();
+              const eventHash = ev.event_hash || ev.eventHash || this.generateEventHash(mangaId, chapterNum, timestamp);
+              const id = ev.id || `evt_${mangaId}_${chapterNum}_${Date.now()}`;
+              const genres = typeof ev.genres === 'string' ? ev.genres : JSON.stringify(Array.isArray(ev.genres) ? ev.genres : []);
+              const coverUrl = ev.cover_url || ev.coverUrl || '';
+              const chapterId = (ev.chapter_id || ev.chapterId || '').toString();
+              const source = ev.source || 'seed-import';
+              const receivedAt = ev.received_at || ev.receivedAt || timestamp;
+
+              insertStmt.run(id, mangaId, ev.manga_title || ev.mangaTitle, chapterNum, chapterId, coverUrl, genres, timestamp, receivedAt, source, eventHash);
+            }
+            this.db.exec('COMMIT');
+            console.log(`✅ [DB SEED] Successfully seeded ${data.mangas?.length || 0} mangas and ${data.events.length} events into SQLite.`);
+          } catch (seedErr) {
+            this.db.exec('ROLLBACK');
+            console.error('❌ [DB SEED] Error committing seed events:', seedErr.message);
+          }
+        }
+        return;
+      }
+
       if (eventCount === 0 && fs.existsSync(MOCK_DB_FILE)) {
         const raw = fs.readFileSync(MOCK_DB_FILE, 'utf-8');
         const data = JSON.parse(raw);
@@ -122,7 +168,7 @@ export class TrackerDatabase {
         }
       }
     } catch (err) {
-      console.warn('⚠️ [DB MIGRATION] Notice: Could not migrate from mock-db.json:', err.message);
+      console.warn('⚠️ [DB MIGRATION] Notice: Could not migrate from mock-db.json / seed-data.json:', err.message);
     }
   }
 
@@ -135,6 +181,26 @@ export class TrackerDatabase {
         this.memStore = JSON.parse(raw);
       } catch (e) {
         this.memStore = { mangas: {}, events: [], meta: {} };
+      }
+    }
+
+    // Seed memStore if empty
+    if ((!this.memStore.events || this.memStore.events.length < 100) && fs.existsSync(SEED_DATA_FILE)) {
+      try {
+        const raw = fs.readFileSync(SEED_DATA_FILE, 'utf-8');
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.mangas)) {
+          for (const m of data.mangas) {
+            this.memStore.mangas[m.id] = m;
+          }
+        }
+        if (Array.isArray(data.events)) {
+          this.memStore.events = data.events;
+        }
+        this.saveFallback();
+        console.log(`✅ [DB SEED] Fallback JSON engine seeded with ${data.events.length} events.`);
+      } catch (err) {
+        console.warn('⚠️ [DB SEED] Fallback seed error:', err.message);
       }
     }
   }
