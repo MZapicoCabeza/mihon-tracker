@@ -33,6 +33,7 @@
     "chart.js": "^4.5.1",
     "lucide-react": "^1.61.0",
     "pako": "^3.0.2",
+    "protobufjs": "^8.8.1",
     "react": "^19.3.1",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.3.1"
