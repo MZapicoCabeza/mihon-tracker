@@ -12,6 +12,10 @@ export interface MangaItem {
   lastReadAt: string;
   startedAt?: string;
   readingMonths?: number;
+  daysSinceLastRead?: number;
+  readingRecency?: 'recent' | 'long_time';
+  publicationStatus?: 'completed' | 'ongoing';
+  canonicalKey?: string;
   author?: string;
   artist?: string;
   source?: string;

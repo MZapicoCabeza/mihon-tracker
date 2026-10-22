@@ -51,12 +51,36 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
 
         {/* Top Header with Cover */}
         <div className="flex gap-4 items-start">
-          <div className="w-24 h-36 rounded-2xl overflow-hidden flex-shrink-0 shadow-md border border-purple-100 bg-[#F3EFFC] relative">
+          <div className="w-24 h-36 rounded-2xl overflow-hidden flex-shrink-0 shadow-md border border-purple-100 bg-gradient-to-br from-[#EDE9FE] to-[#F3EFFC] relative">
             {manga.coverUrl ? (
-              <img src={manga.coverUrl} alt={manga.title} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-3xl">📖</div>
-            )}
+              <img
+                src={manga.coverUrl}
+                alt={manga.title}
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const parent = e.currentTarget.parentElement;
+                  if (parent) {
+                    const fallback = parent.querySelector('.cover-modal-fallback');
+                    if (fallback) fallback.classList.remove('hidden');
+                  }
+                }}
+              />
+            ) : null}
+
+            <div
+              className={`cover-modal-fallback absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-gradient-to-br from-[#ECE7FC] to-[#F5F3FF] text-[#6B21A8] ${
+                manga.coverUrl ? 'hidden' : ''
+              }`}
+            >
+              <span className="text-3xl mb-1">📖</span>
+              <span className="text-[10px] font-black leading-tight line-clamp-3 text-[#581C87]">
+                {manga.title}
+              </span>
+            </div>
+
             <button
               onClick={() => onToggleFavorite(manga.id)}
               className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 shadow-sm"
@@ -82,13 +106,26 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
               </p>
             )}
 
-            {/* Status pills */}
-            <div className="flex items-center gap-2 mt-2.5">
-              <span className="text-[11px] font-black font-mono text-[#7C3AED] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
+            {/* Status pills: Hábitos vs Emisión */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+              <span className="text-[10px] font-black font-mono text-[#7C3AED] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
                 {percentage}%
               </span>
-              <span className="text-[11px] font-bold text-[#6B7280] bg-[#FAF5FF] px-2 py-0.5 rounded-full capitalize">
-                {manga.status === 'reading' ? 'Leyendo' : manga.status === 'completed' ? 'Completado' : 'Pausado'}
+
+              {/* Hábito de lectura de la usuaria */}
+              {manga.daysSinceLastRead !== undefined && manga.daysSinceLastRead <= 45 ? (
+                <span className="text-[10px] font-black text-[#047857] bg-[#ECFDF5] px-2 py-0.5 rounded-full border border-[#A7F3D0]">
+                  🟢 Leyendo últimamente
+                </span>
+              ) : (
+                <span className="text-[10px] font-black text-[#B45309] bg-[#FEF3C7] px-2 py-0.5 rounded-full border border-[#FDE68A]">
+                  ⏸️ Llevo tiempo sin leer
+                </span>
+              )}
+
+              {/* Estado de publicación del manhwa */}
+              <span className="text-[10px] font-bold text-[#6D28D9] bg-[#EDE9FE] px-2 py-0.5 rounded-full border border-[#C4B5FD]">
+                {manga.status === 'completed' ? '🏁 Emisión finalizada' : '📖 En emisión'}
               </span>
             </div>
           </div>
