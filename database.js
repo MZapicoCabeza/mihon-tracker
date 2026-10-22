@@ -58,6 +58,8 @@ export class TrackerDatabase {
         source TEXT DEFAULT '',
         rating REAL DEFAULT 0,
         last_read_at TEXT DEFAULT '',
+        started_at TEXT DEFAULT '',
+        reading_months INTEGER DEFAULT 0,
         created_at TEXT DEFAULT '',
         updated_at TEXT DEFAULT ''
       );
@@ -87,6 +89,13 @@ export class TrackerDatabase {
       CREATE INDEX IF NOT EXISTS idx_mangas_status ON mangas(status);
       CREATE INDEX IF NOT EXISTS idx_mangas_last_read ON mangas(last_read_at DESC);
     `);
+
+    try {
+      this.db.exec("ALTER TABLE mangas ADD COLUMN started_at TEXT DEFAULT ''");
+    } catch (e) {}
+    try {
+      this.db.exec("ALTER TABLE mangas ADD COLUMN reading_months INTEGER DEFAULT 0");
+    } catch (e) {}
   }
 
   migrateFromMockDbIfNeeded() {
@@ -220,6 +229,19 @@ export class TrackerDatabase {
     const rating = Number(manga.rating ?? (existing ? existing.rating : 0));
     const lastReadAt = manga.lastReadAt || manga.last_read_at || (existing ? existing.lastReadAt : '');
     
+    let startedAt = manga.startedAt || manga.started_at || (existing ? existing.startedAt : '') || lastReadAt;
+    let readingMonths = Number(manga.readingMonths ?? manga.reading_months ?? (existing ? existing.readingMonths : 0));
+
+    if (!readingMonths && startedAt) {
+      const s = new Date(startedAt);
+      const e = new Date(lastReadAt || now);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+        const y = e.getFullYear() - s.getFullYear();
+        const m = e.getMonth() - s.getMonth();
+        readingMonths = Math.max(0, y * 12 + m);
+      }
+    }
+
     let status = manga.status || (existing ? existing.status : 'reading');
     if (totalChapters > 0 && currentChapter >= totalChapters) {
       status = 'completed';
@@ -241,6 +263,8 @@ export class TrackerDatabase {
             source = ?,
             rating = ?,
             last_read_at = CASE WHEN ? != '' THEN ? ELSE last_read_at END,
+            started_at = CASE WHEN started_at = '' OR started_at IS NULL THEN ? ELSE started_at END,
+            reading_months = MAX(reading_months, ?),
             updated_at = ?
           WHERE id = ?
         `);
@@ -259,6 +283,8 @@ export class TrackerDatabase {
           rating,
           lastReadAt,
           lastReadAt,
+          startedAt,
+          readingMonths,
           now,
           id
         );
@@ -268,8 +294,8 @@ export class TrackerDatabase {
           INSERT INTO mangas (
             id, title, cover_url, current_chapter, total_chapters,
             status, is_favorite, genres, author, artist, source, rating,
-            last_read_at, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            last_read_at, started_at, reading_months, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         stmt.run(
           id,
@@ -285,6 +311,8 @@ export class TrackerDatabase {
           source,
           rating,
           lastReadAt,
+          startedAt,
+          readingMonths,
           now,
           now
         );
@@ -306,6 +334,8 @@ export class TrackerDatabase {
         source,
         rating,
         lastReadAt: lastReadAt || (existing ? existing.lastReadAt : ''),
+        startedAt: existing?.startedAt || startedAt || '',
+        readingMonths: Math.max(readingMonths, existing?.readingMonths || 0),
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now,
       };
@@ -390,10 +420,8 @@ export class TrackerDatabase {
     }
 
     const mangaId = eventData.manga_id.toString();
-    const chapterNum = Number(eventData.chapter_number);
-    if (isNaN(chapterNum) || chapterNum < 0) {
-      throw new Error('chapter_number must be a non-negative number');
-    }
+    const rawNum = Number(eventData.chapter_number);
+    const chapterNum = isNaN(rawNum) ? 0 : Math.max(0, rawNum);
 
     const timestamp = eventData.timestamp && !isNaN(new Date(eventData.timestamp).getTime())
       ? new Date(eventData.timestamp).toISOString()
@@ -868,6 +896,8 @@ export class TrackerDatabase {
       source: row.source || '',
       rating: Number(row.rating || 0),
       lastReadAt: row.last_read_at || '',
+      startedAt: row.started_at || '',
+      readingMonths: Number(row.reading_months || 0),
       createdAt: row.created_at || '',
       updatedAt: row.updated_at || '',
     };

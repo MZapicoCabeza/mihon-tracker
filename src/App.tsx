@@ -247,7 +247,7 @@ export const App: React.FC = () => {
               />
             )}
 
-            {currentTab === 'stats' && <StatisticsTab stats={stats} />}
+            {currentTab === 'stats' && <StatisticsTab stats={stats} mangas={mangas} />}
           </main>
         )}
 

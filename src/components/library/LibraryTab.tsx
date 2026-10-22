@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Heart, CheckCircle2, PauseCircle, PlayCircle, Layers, X } from 'lucide-react';
+import { Search, Heart, CheckCircle2, PauseCircle, PlayCircle, Layers, X, Clock, ArrowUpDown } from 'lucide-react';
 import { MangaItem, MangaStatus } from '../../types/tracker';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
 
@@ -11,6 +11,7 @@ interface LibraryTabProps {
 }
 
 type FilterOption = 'all' | 'reading' | 'completed' | 'paused' | 'favorites';
+type SortOption = 'recent' | 'duration' | 'progress' | 'title';
 
 export const LibraryTab: React.FC<LibraryTabProps> = ({
   mangas,
@@ -19,11 +20,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [groupByCategory, setGroupByCategory] = useState(false);
 
-  // Filter logic
+  // Filter & sort logic
   const filteredMangas = useMemo(() => {
-    return mangas.filter((manga) => {
+    const list = mangas.filter((manga) => {
       const matchesSearch =
         manga.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         manga.genres.some((g) => g.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -35,7 +37,24 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       if (activeFilter === 'favorites') return manga.isFavorite;
       return manga.status === activeFilter;
     });
-  }, [mangas, searchTerm, activeFilter]);
+
+    return list.sort((a, b) => {
+      if (sortBy === 'duration') {
+        const diff = (b.readingMonths || 0) - (a.readingMonths || 0);
+        if (diff !== 0) return diff;
+      }
+      if (sortBy === 'progress') {
+        const progA = a.currentChapter / (a.totalChapters || 1);
+        const progB = b.currentChapter / (b.totalChapters || 1);
+        const diff = progB - progA;
+        if (diff !== 0) return diff;
+      }
+      if (sortBy === 'title') {
+        return a.title.localeCompare(b.title);
+      }
+      return (b.lastReadAt || '').localeCompare(a.lastReadAt || '');
+    });
+  }, [mangas, searchTerm, activeFilter, sortBy]);
 
   // Grouping logic
   const groupedData = useMemo(() => {
@@ -155,8 +174,17 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
               />
             </div>
 
-            <div className="text-[10px] font-bold text-[#8A847E] pt-0.5">
-              Última lectura: {formatRelativeTimeSpanish(manga.lastReadAt)}
+            <div className="flex items-center justify-between text-[10px] font-bold text-[#8A847E] pt-0.5 gap-1">
+              <span className="truncate">Última lectura: {formatRelativeTimeSpanish(manga.lastReadAt)}</span>
+              {manga.readingMonths !== undefined && manga.readingMonths > 0 ? (
+                <span
+                  title={manga.startedAt ? `Iniciado en ${new Date(manga.startedAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}` : ''}
+                  className="flex-shrink-0 text-[#3D2622] font-black bg-[#FAF0D7] border border-[#2D2926]/40 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs"
+                >
+                  <span>⏱️</span>
+                  <span>{manga.readingMonths} {manga.readingMonths === 1 ? 'mes' : 'meses'}</span>
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -266,6 +294,55 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         >
           En pausa ({mangas.filter((m) => m.status === 'paused').length})
         </button>
+      </div>
+
+      {/* Sorting Selector */}
+      <div className="flex items-center justify-between px-1 text-xs">
+        <span className="font-extrabold text-[#7A746E] flex items-center gap-1 text-[11px]">
+          <ArrowUpDown className="w-3 h-3" /> Ordenar:
+        </span>
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => setSortBy('recent')}
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all ${
+              sortBy === 'recent'
+                ? 'bg-[#2D2926] text-white'
+                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+            }`}
+          >
+            Recientes
+          </button>
+          <button
+            onClick={() => setSortBy('duration')}
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1 ${
+              sortBy === 'duration'
+                ? 'bg-[#E27D60] text-white shadow-xs'
+                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+            }`}
+          >
+            <span>⏱️</span> Más tiempo leyendo
+          </button>
+          <button
+            onClick={() => setSortBy('progress')}
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all ${
+              sortBy === 'progress'
+                ? 'bg-[#2D2926] text-white'
+                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+            }`}
+          >
+            Progreso
+          </button>
+          <button
+            onClick={() => setSortBy('title')}
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all ${
+              sortBy === 'title'
+                ? 'bg-[#2D2926] text-white'
+                : 'bg-[#FAF7F2] text-[#6B6661] border border-[#2D2926]/20'
+            }`}
+          >
+            A-Z
+          </button>
+        </div>
       </div>
 
       {/* Manga Cards List / Grouped View */}

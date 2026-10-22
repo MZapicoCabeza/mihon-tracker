@@ -10,6 +10,8 @@ export interface MangaItem {
   isFavorite: boolean;
   genres: string[];
   lastReadAt: string;
+  startedAt?: string;
+  readingMonths?: number;
   author?: string;
   artist?: string;
   source?: string;

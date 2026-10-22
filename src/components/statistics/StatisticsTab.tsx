@@ -1,15 +1,21 @@
 import React from 'react';
-import { BookOpen, Clock, CheckCircle2, Award, Calendar, BarChart2, PieChart as PieIcon } from 'lucide-react';
+import { BookOpen, Clock, CheckCircle2, Award, Calendar, BarChart2, PieChart as PieIcon, Trophy, Sparkles } from 'lucide-react';
 import { MonthlyChart } from '../charts/MonthlyChart';
 import { GenreDonutChart } from '../charts/GenreDonutChart';
-import { ReadingStats } from '../../types/tracker';
+import { MangaItem, ReadingStats } from '../../types/tracker';
 
 interface StatisticsTabProps {
   stats: ReadingStats;
+  mangas?: MangaItem[];
 }
 
-export const StatisticsTab: React.FC<StatisticsTabProps> = ({ stats }) => {
+export const StatisticsTab: React.FC<StatisticsTabProps> = ({ stats, mangas = [] }) => {
   const totalAnnualChapters = stats.monthlyActivity.reduce((acc, curr) => acc + curr.chapters, 0);
+
+  const topLongestRead = mangas
+    .filter((m) => (m.readingMonths || 0) > 0)
+    .sort((a, b) => (b.readingMonths || 0) - (a.readingMonths || 0))
+    .slice(0, 6);
 
   return (
     <div className="space-y-4 pb-28 animate-fadeIn">
@@ -116,6 +122,63 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({ stats }) => {
           </div>
         </div>
       </div>
+
+      {/* Longest Read Mangas Section */}
+      {topLongestRead.length > 0 && (
+        <div className="bg-white border-[1.8px] border-[#2D2926] rounded-3xl p-4 shadow-[0_4px_0px_#2D2926] space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-[#F8C866]" />
+              <div>
+                <h2 className="text-sm font-black text-[#242220] uppercase">Más Tiempo Leyendo</h2>
+                <p className="text-[11px] font-bold text-[#8A847E]">Tus obras con mayor antigüedad de seguimiento</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-black text-[#242220] bg-[#FAF0D7] border border-[#2D2926] px-2 py-0.5 rounded-full">
+              Fidelidad
+            </span>
+          </div>
+
+          <div className="space-y-2 pt-1">
+            {topLongestRead.map((manga, idx) => {
+              const years = Math.floor((manga.readingMonths || 0) / 12);
+              const remainingMonths = (manga.readingMonths || 0) % 12;
+              let durationLabel = `${manga.readingMonths} meses`;
+              if (years > 0) {
+                durationLabel = remainingMonths > 0 ? `${years}a ${remainingMonths}m` : `${years} ${years === 1 ? 'año' : 'años'}`;
+              }
+
+              const medalColors = ['bg-[#FFD700]', 'bg-[#E0E0E0]', 'bg-[#E6A15C]'];
+              const medalBg = idx < 3 ? medalColors[idx] : 'bg-white';
+
+              return (
+                <div
+                  key={manga.id}
+                  className="flex items-center justify-between p-2.5 rounded-2xl bg-[#FAF7F2] border-[1.5px] border-[#2D2926]"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-6 h-6 rounded-full border border-[#2D2926] flex items-center justify-center text-[11px] font-black flex-shrink-0 shadow-2xs ${medalBg}`}>
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-black text-[#242220] truncate">
+                        {manga.title}
+                      </h3>
+                      <p className="text-[10px] font-bold text-[#8A847E] truncate">
+                        {manga.startedAt ? `Desde ${new Date(manga.startedAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}` : ''} · Cap. {manga.currentChapter}/{manga.totalChapters}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="flex-shrink-0 ml-2 text-xs font-black text-[#242220] bg-white border border-[#2D2926] px-2.5 py-1 rounded-xl shadow-2xs">
+                    ⏱️ {durationLabel}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Genre Distribution (Donut Chart) */}
       <div className="bg-white border-[1.8px] border-[#2D2926] rounded-3xl p-4 shadow-[0_4px_0px_#2D2926]">

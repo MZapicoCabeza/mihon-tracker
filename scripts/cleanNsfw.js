@@ -125,14 +125,16 @@ async function run() {
     db.clearAll();
     db.upsertLibrary(cleanMangas);
     for (const h of cleanHistory) {
-      db.recordReadingEvent({
-        id: `bk-${h.manga_id}-${h.chapter_number}-${new Date(h.timestamp || h.readAt).getTime()}`,
-        manga_id: h.manga_id,
-        manga_title: h.manga_title,
-        chapter_number: h.chapter_number,
-        timestamp: h.timestamp || h.readAt,
-        source: 'backup-import',
-      });
+      try {
+        db.recordReadingEvent({
+          id: `bk-${h.manga_id}-${h.chapter_number}-${new Date(h.timestamp || h.readAt).getTime()}`,
+          manga_id: h.manga_id,
+          manga_title: h.manga_title,
+          chapter_number: h.chapter_number,
+          timestamp: h.timestamp || h.readAt,
+          source: 'backup-import',
+        });
+      } catch (err) {}
     }
     console.log('\n💾 Base de datos local SQLite sincronizada y limpia.');
   } catch (e) {

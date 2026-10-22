@@ -296,15 +296,18 @@ export async function handleRequest(req, res) {
           return {
             id: mangaData.id?.toString() || mangaData.url || mangaData.title,
             title: mangaData.title,
-            cover_url: mangaData.thumbnailUrl || mangaData.coverUrl || '',
-            current_chapter: maxReadChapter || mangaData.currentChapter || 0,
-            total_chapters: chapters.length || mangaData.totalChapters || 0,
+            cover_url: mangaData.thumbnailUrl || mangaData.coverUrl || mangaData.cover_url || '',
+            current_chapter: mangaData.current_chapter ?? mangaData.currentChapter ?? maxReadChapter ?? 0,
+            total_chapters: mangaData.total_chapters ?? mangaData.totalChapters ?? chapters.length ?? 0,
             genres: mangaData.genre || mangaData.genres || [],
             author: mangaData.author || '',
             artist: mangaData.artist || '',
             source: mangaData.source?.toString() || '',
-            is_favorite: mangaData.favorite ? 1 : 0,
-            status: mangaData.status === 2 ? 'completed' : 'reading',
+            is_favorite: (mangaData.favorite !== undefined ? mangaData.favorite : mangaData.is_favorite) ? 1 : 0,
+            status: mangaData.status === 2 || mangaData.status === 'completed' ? 'completed' : 'reading',
+            started_at: mangaData.started_at || mangaData.startedAt || '',
+            last_read_at: mangaData.last_read_at || mangaData.lastReadAt || '',
+            reading_months: mangaData.reading_months ?? mangaData.readingMonths ?? 0,
           };
         });
 
