@@ -73,6 +73,14 @@ export const App: React.FC = () => {
     refreshAllData(true);
   }, [refreshAllData]);
 
+  // Periodic background refresh every 15s to keep stats and library perfectly in sync
+  useEffect(() => {
+    const timer = setInterval(() => {
+      refreshAllData(false);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [refreshAllData]);
+
   // Delta polling every 3 seconds to catch live events dispatched from Mihon
   useEffect(() => {
     const pollEvents = async () => {
@@ -237,6 +245,10 @@ export const App: React.FC = () => {
                 onNavigateTab={(tab) => setCurrentTab(tab)}
                 onToggleFavorite={handleToggleFavorite}
                 onUpdateStatus={handleUpdateStatus}
+                onRefreshData={async () => {
+                  await refreshAllData(false);
+                  showToast('✨ Sincronizado con la nube');
+                }}
               />
             )}
 

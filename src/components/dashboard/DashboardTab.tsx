@@ -28,6 +28,7 @@ interface DashboardTabProps {
   onNavigateTab?: (tab: 'dashboard' | 'library' | 'stats') => void;
   onToggleFavorite?: (id: string) => void;
   onUpdateStatus?: (id: string, status: MangaStatus) => void;
+  onRefreshData?: () => Promise<void>;
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
@@ -39,10 +40,25 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   onNavigateTab = () => {},
   onToggleFavorite = () => {},
   onUpdateStatus = () => {},
+  onRefreshData,
 }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState(6); // Default to today
   const [selectedManga, setSelectedManga] = useState<MangaItem | null>(null);
   const [isWrappedOpen, setIsWrappedOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncClick = async () => {
+    if (onRefreshData) {
+      setIsSyncing(true);
+      try {
+        await onRefreshData();
+      } finally {
+        setIsSyncing(false);
+      }
+    } else {
+      onOpenSyncModal();
+    }
+  };
 
   const weeklyDays = stats.weeklyActivity.length === 7
     ? stats.weeklyActivity
@@ -91,11 +107,12 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
           {/* Sync Pill */}
           <button
-            onClick={onOpenSyncModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#E9D5FF] text-xs font-bold text-[#7C3AED] shadow-xs hover:bg-[#F3E8FF] transition-all"
+            onClick={handleSyncClick}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#E9D5FF] text-xs font-bold text-[#7C3AED] shadow-xs hover:bg-[#F3E8FF] active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sincronizar</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
           </button>
         </div>
 
