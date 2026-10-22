@@ -320,7 +320,7 @@ export async function handleRequest(req, res) {
               manga_id: h.manga_id || h.url || 'backup',
               manga_title: h.manga_title || h.title || 'Manga',
               chapter_number: Number(h.chapter_number || h.lastRead || 1),
-              timestamp: h.readAt ? new Date(h.readAt).toISOString() : new Date().toISOString(),
+              timestamp: (h.readAt || h.timestamp) ? new Date(h.readAt || h.timestamp).toISOString() : new Date().toISOString(),
               source: 'backup-import',
             });
             importedEvents++;

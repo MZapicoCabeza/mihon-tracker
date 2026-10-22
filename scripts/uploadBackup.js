@@ -94,7 +94,30 @@ async function main() {
     });
   }
 
-  console.log(`\n✨ ¡Todo el historial y la biblioteca han quedado guardados de forma persistente en la base de datos!`);
+  console.log(`\n✨ ¡Todo el historial y la biblioteca han quedado guardados de forma persistente en la base de datos de la nube!`);
+
+  // 3. Also populate local database if local database file exists
+  try {
+    const { db } = await import('../database.js');
+    console.log(`💾 Guardando también en la base de datos local SQLite...`);
+    db.upsertLibrary(result.mangas);
+    for (const h of result.history) {
+      try {
+        db.recordReadingEvent({
+          id: `bk-${h.manga_id}-${h.chapter_number}-${new Date(h.readAt || h.timestamp).getTime()}`,
+          manga_id: h.manga_id,
+          manga_title: h.manga_title,
+          chapter_number: h.chapter_number,
+          timestamp: h.readAt || h.timestamp,
+          source: 'backup-import',
+        });
+      } catch (e) {}
+    }
+    console.log(`✅ Base de datos local actualizada.`);
+  } catch (err) {
+    console.warn(`(Nota: No se pudo escribir en base de datos local: ${err.message})`);
+  }
+
   console.log(`🌐 Puedes verlos ahora en: ${BACKEND_URL} y en tu APK móvil.`);
 }
 

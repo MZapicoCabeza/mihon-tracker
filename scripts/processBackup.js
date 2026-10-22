@@ -212,11 +212,13 @@ function processRawBackupData(data) {
         const matchingChapter = chapters.find((c) => c.url === h.url);
         const chapterNum = matchingChapter ? Number(matchingChapter.chapterNumber) : 1;
 
+        const eventDateStr = new Date(Number(h.lastRead)).toISOString();
         allHistoryEvents.push({
           manga_id: mangaRecord.id,
           manga_title: title,
           chapter_number: chapterNum,
-          timestamp: new Date(Number(h.lastRead)).toISOString(),
+          timestamp: eventDateStr,
+          readAt: eventDateStr,
           source: 'backup-import',
         });
       }
