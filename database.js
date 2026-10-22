@@ -732,15 +732,21 @@ export class TrackerDatabase {
       libraryStatuses.forEach(s => { statusMap[s.status] = s.count; });
       const chapterTotals = this.db.prepare(`SELECT SUM(current_chapter) as readChapters, SUM(total_chapters) as totalChapters FROM mangas`).get();
 
-      const diffYears = earliestDate
-        ? Math.max(1, Math.round((new Date().getTime() - new Date(earliestDate).getTime()) / (1000 * 3600 * 24 * 365.25 * 10)) / 10)
-        : 1;
+      let yearsActiveLabel = 'Casi 4 años';
+      if (earliestDate) {
+        const s = new Date(earliestDate);
+        const now = new Date();
+        const diffMonths = (now.getFullYear() - s.getFullYear()) * 12 + (now.getMonth() - s.getMonth());
+        const years = Math.floor(diffMonths / 12);
+        const remMonths = diffMonths % 12;
+        yearsActiveLabel = years > 0 ? (remMonths > 0 ? `${years} años y ${remMonths}m` : `${years} años`) : `${diffMonths} meses`;
+      }
 
       return {
         distinctActiveDays: distinctDays,
-        earliestReadDate: earliestDate || '2024-09-12',
+        earliestReadDate: earliestDate || '2023-02-07',
         latestReadDate: latestDate || new Date().toISOString(),
-        yearsActiveLabel: diffYears >= 1 ? `${Math.floor(diffYears)} años` : `${Math.round(diffYears * 12)} meses`,
+        yearsActiveLabel,
         longestStreakDays: maxStreak,
         recordDay: {
           date: topDayRow?.d || '2025-11-19',
