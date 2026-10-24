@@ -267,6 +267,7 @@ export async function handleRequest(req, res) {
       sendError(res, 500, 'Failed to calculate stats: ' + err.message);
       return;
     }
+  }
 
   // 5.1 GET /api/cover-proxy: Server-side cover proxy bypassing CORS and hotlink protection
   if (req.method === 'GET' && pathname === '/api/cover-proxy') {
@@ -306,7 +307,6 @@ export async function handleRequest(req, res) {
       sendError(res, 502, 'Proxy error: ' + proxyErr.message);
       return;
     }
-  }
   }
 
   // 6. POST /api/sync/backup: Import backup payload (JSON export or parsed backup)
