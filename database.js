@@ -308,10 +308,8 @@ export class TrackerDatabase {
       }
     }
 
-    let status = manga.status || (existing ? existing.status : 'reading');
-    if (totalChapters > 0 && currentChapter >= totalChapters) {
-      status = 'completed';
-    }
+    // User reading status is strictly manual: defaults to 'reading' and is only changed by explicit user action
+    let status = (existing && existing.status) ? existing.status : (manga.status || 'reading');
 
     if (this.isSqlite) {
       if (existing) {

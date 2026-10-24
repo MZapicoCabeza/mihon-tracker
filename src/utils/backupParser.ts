@@ -228,7 +228,6 @@ function normalizeBackupJson(data: any): ParsedBackupResult {
     const coverUrl = mangaData.thumbnailUrl || mangaData.coverUrl || '';
     const currentChapter = maxRead || Number(mangaData.currentChapter || 0);
     const totalChapters = chapters.length || Number(mangaData.totalChapters || currentChapter);
-    const isCompleted = mangaData.status === 2 || (totalChapters > 0 && currentChapter >= totalChapters);
 
     const startedDate = earliestTimestamp ? new Date(earliestTimestamp).toISOString() : new Date().toISOString();
     const lastReadDate = latestTimestamp ? new Date(latestTimestamp).toISOString() : startedDate;
@@ -240,7 +239,7 @@ function normalizeBackupJson(data: any): ParsedBackupResult {
       coverUrl,
       currentChapter,
       totalChapters,
-      status: isCompleted ? ('completed' as const) : ('reading' as const),
+      status: 'reading' as const,
       isFavorite: Boolean(mangaData.favorite || mangaData.isFavorite),
       genres,
       author: mangaData.author || '',

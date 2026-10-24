@@ -144,10 +144,24 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
                 </span>
               )}
 
-              {/* Estado de publicación del manhwa */}
-              <span className="text-[10px] font-bold text-[#6D28D9] bg-[#EDE9FE] px-2 py-0.5 rounded-full border border-[#C4B5FD]">
-                {manga.status === 'completed' ? '🏁 Emisión finalizada' : '📖 En emisión'}
-              </span>
+              {/* Estado de lectura del usuario */}
+              {manga.status === 'completed' ? (
+                <span className="text-[10px] font-bold text-[#6D28D9] bg-[#EDE9FE] px-2 py-0.5 rounded-full border border-[#C4B5FD]">
+                  🏁 Terminado
+                </span>
+              ) : manga.status === 'paused' ? (
+                <span className="text-[10px] font-bold text-[#D97706] bg-[#FEF3C7] px-2 py-0.5 rounded-full border border-[#FDE68A]">
+                  ⏸️ En pausa
+                </span>
+              ) : manga.status === 'deleted' ? (
+                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                  🗑️ En papelera
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-full border border-[#BFDBFE]">
+                  📖 Leyendo (Activo)
+                </span>
+              )}
             </div>
           </div>
         </div>

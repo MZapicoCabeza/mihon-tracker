@@ -344,7 +344,7 @@ export async function handleRequest(req, res) {
             artist: mangaData.artist || '',
             source: mangaData.source?.toString() || '',
             is_favorite: (mangaData.favorite !== undefined ? mangaData.favorite : mangaData.is_favorite) ? 1 : 0,
-            status: mangaData.status === 2 || mangaData.status === 'completed' ? 'completed' : 'reading',
+            status: mangaData.status === 2 || mangaData.status === 'completed' ? 'completed' : (mangaData.status === 'paused' ? 'paused' : 'reading'),
             started_at: mangaData.started_at || mangaData.startedAt || '',
             last_read_at: mangaData.last_read_at || mangaData.lastReadAt || '',
             reading_months: mangaData.reading_months ?? mangaData.readingMonths ?? 0,

@@ -38,8 +38,8 @@ export type LibraryFilterOption =
   | 'recent_reading'
   | 'on_hold'
   | 'favorites'
-  | 'finished_issuing'
-  | 'ongoing_issuing'
+  | 'completed'
+  | 'paused'
   | 'deleted';
 
 export type LibrarySortOption =
@@ -100,8 +100,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       if (activeFilter === 'favorites') return manga.isFavorite;
       if (activeFilter === 'recent_reading') return isRecentlyRead(manga);
       if (activeFilter === 'on_hold') return !isRecentlyRead(manga);
-      if (activeFilter === 'finished_issuing') return manga.status === 'completed';
-      if (activeFilter === 'ongoing_issuing') return manga.status !== 'completed';
+      if (activeFilter === 'completed') return manga.status === 'completed';
+      if (activeFilter === 'paused') return manga.status === 'paused';
       return true;
     });
 
@@ -141,20 +141,22 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
     let recent = 0;
     let onHold = 0;
     let favs = 0;
-    let finished = 0;
+    let completed = 0;
+    let paused = 0;
     let deleted = 0;
     for (const m of mangas) {
       if (m.status === 'deleted') {
         deleted++;
         continue;
       }
+      if (m.status === 'completed') completed++;
+      if (m.status === 'paused') paused++;
       if (isRecentlyRead(m)) recent++;
       else onHold++;
       if (m.isFavorite) favs++;
-      if (m.status === 'completed') finished++;
     }
     const all = mangas.length - deleted;
-    return { recent, onHold, favs, finished, deleted, all };
+    return { recent, onHold, favs, completed, paused, deleted, all };
   }, [mangas]);
 
   // Grouping logic
@@ -254,14 +256,18 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                   </span>
                 )}
 
-                {/* 2. Estado de emisión del manhwa */}
-                {isFinished ? (
+                {/* 2. Estado de lectura del usuario */}
+                {manga.status === 'completed' ? (
                   <span className="text-[9px] font-bold text-[#6D28D9] bg-[#EDE9FE] px-2 py-0.5 rounded-full border border-[#C4B5FD]">
-                    🏁 Emisión finalizada
+                    🏁 Terminado
+                  </span>
+                ) : manga.status === 'paused' ? (
+                  <span className="text-[9px] font-bold text-[#D97706] bg-[#FEF3C7] px-2 py-0.5 rounded-full border border-[#FDE68A]">
+                    ⏸️ En pausa
                   </span>
                 ) : (
                   <span className="text-[9px] font-bold text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-full border border-[#BFDBFE]">
-                    📖 En emisión
+                    📖 Leyendo
                   </span>
                 )}
               </div>
@@ -470,17 +476,33 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           Favoritos ({counts.favs})
         </button>
 
-        {/* Emisión terminada */}
-        <button
-          onClick={() => setActiveFilter('finished_issuing')}
-          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-            activeFilter === 'finished_issuing'
-              ? 'bg-[#6D28D9] text-white shadow-xs'
-              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60 hover:bg-purple-50'
-          }`}
-        >
-          Emisión finalizada ({counts.finished})
-        </button>
+        {/* Terminados (solo si la usuaria lo marcó como terminado) */}
+        {counts.completed > 0 && (
+          <button
+            onClick={() => setActiveFilter('completed')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+              activeFilter === 'completed'
+                ? 'bg-[#6D28D9] text-white shadow-xs'
+                : 'bg-white text-[#6D28D9] border border-[#C4B5FD] hover:bg-purple-50'
+            }`}
+          >
+            🏁 Terminados ({counts.completed})
+          </button>
+        )}
+
+        {/* En pausa (solo si la usuaria lo pausó) */}
+        {counts.paused > 0 && (
+          <button
+            onClick={() => setActiveFilter('paused')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+              activeFilter === 'paused'
+                ? 'bg-[#D97706] text-white shadow-xs'
+                : 'bg-white text-[#D97706] border border-[#FDE68A] hover:bg-amber-50'
+            }`}
+          >
+            ⏸️ En pausa ({counts.paused})
+          </button>
+        )}
 
         {/* Borrados / Papelera */}
         <button
