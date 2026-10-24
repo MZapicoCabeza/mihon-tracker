@@ -1,5 +1,17 @@
 import React from 'react';
-import { X, Calendar, Clock, BookOpen, Heart, Sparkles, CheckCircle2, PauseCircle, PlayCircle } from 'lucide-react';
+import {
+  X,
+  Calendar,
+  Clock,
+  BookOpen,
+  Heart,
+  Sparkles,
+  CheckCircle2,
+  PauseCircle,
+  PlayCircle,
+  Trash2,
+  RotateCcw,
+} from 'lucide-react';
 import { MangaItem, MangaStatus } from '../../types/tracker';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
 import { getCoverSrc } from '../../utils/coverUtils';
@@ -9,6 +21,7 @@ interface MangaDetailModalProps {
   onClose: () => void;
   onToggleFavorite: (id: string) => void;
   onUpdateStatus: (id: string, status: MangaStatus) => void;
+  onDeletePermanently?: (id: string) => void;
 }
 
 export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
@@ -16,6 +29,7 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
   onClose,
   onToggleFavorite,
   onUpdateStatus,
+  onDeletePermanently,
 }) => {
   if (!manga) return null;
 
@@ -228,38 +242,97 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
         </div>
 
         {/* Status Actions */}
-        <div className="pt-2 border-t border-[#F3E8FF] flex items-center justify-between gap-2">
-          <button
-            onClick={() => onUpdateStatus(manga.id, 'reading')}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-              manga.status === 'reading'
-                ? 'bg-[#7C3AED] text-white shadow-xs'
-                : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
-            }`}
-          >
-            <PlayCircle className="w-4 h-4" /> Leyendo
-          </button>
-          <button
-            onClick={() => onUpdateStatus(manga.id, 'completed')}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-              manga.status === 'completed'
-                ? 'bg-[#10B981] text-white shadow-xs'
-                : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" /> Terminado
-          </button>
-          <button
-            onClick={() => onUpdateStatus(manga.id, 'paused')}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-              manga.status === 'paused'
-                ? 'bg-[#F59E0B] text-white shadow-xs'
-                : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
-            }`}
-          >
-            <PauseCircle className="w-4 h-4" /> Pausa
-          </button>
-        </div>
+        {manga.status === 'deleted' ? (
+          <div className="pt-2 border-t border-rose-100 flex flex-col gap-2">
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700">
+              <span className="text-base">🗑️</span>
+              <span className="text-[11px] font-bold">
+                Este manhwa está en la papelera de borrados.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  onUpdateStatus(manga.id, 'reading');
+                  onClose();
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all bg-[#047857] text-white shadow-xs hover:bg-[#065f46]"
+              >
+                <RotateCcw className="w-4 h-4" /> Restaurar a biblioteca
+              </button>
+              {onDeletePermanently && (
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `¿Estás segura de eliminar permanentemente "${manga.title}" de la base de datos? Esta acción es irreversible.`
+                      )
+                    ) {
+                      onDeletePermanently(manga.id);
+                      onClose();
+                    }
+                  }}
+                  className="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white"
+                >
+                  <Trash2 className="w-4 h-4" /> Eliminar definitivo
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="pt-2 border-t border-[#F3E8FF] space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => onUpdateStatus(manga.id, 'reading')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  manga.status === 'reading'
+                    ? 'bg-[#7C3AED] text-white shadow-xs'
+                    : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
+                }`}
+              >
+                <PlayCircle className="w-4 h-4" /> Leyendo
+              </button>
+              <button
+                onClick={() => onUpdateStatus(manga.id, 'completed')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  manga.status === 'completed'
+                    ? 'bg-[#10B981] text-white shadow-xs'
+                    : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" /> Terminado
+              </button>
+              <button
+                onClick={() => onUpdateStatus(manga.id, 'paused')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  manga.status === 'paused'
+                    ? 'bg-[#F59E0B] text-white shadow-xs'
+                    : 'bg-[#F3EFFC] text-[#6B7280] hover:text-[#1E1238]'
+                }`}
+              >
+                <PauseCircle className="w-4 h-4" /> Pausa
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `¿Mover "${manga.title}" a la papelera de borrados? No aparecerá en tu biblioteca activa, pero podrás restaurarlo cuando quieras.`
+                    )
+                  ) {
+                    onUpdateStatus(manga.id, 'deleted');
+                    onClose();
+                  }
+                }}
+                className="text-[11px] font-bold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Mover a borrados
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

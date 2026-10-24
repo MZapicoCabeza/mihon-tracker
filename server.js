@@ -410,8 +410,8 @@ export async function handleRequest(req, res) {
     const id = parts[3];
     try {
       const payload = await parseBody(req);
-      if (!['reading', 'completed', 'paused'].includes(payload.status)) {
-        sendError(res, 400, 'Invalid status. Must be "reading", "completed", or "paused"');
+      if (!['reading', 'completed', 'paused', 'deleted'].includes(payload.status)) {
+        sendError(res, 400, 'Invalid status. Must be "reading", "completed", "paused", or "deleted"');
         return;
       }
       const updated = db.updateMangaStatus(id, payload.status);
@@ -441,6 +441,18 @@ export async function handleRequest(req, res) {
     try {
       db.deleteManga(id);
       sendJson(res, 200, { status: 'ok', deleted: id });
+      return;
+    } catch (err) {
+      sendError(res, 500, err.message);
+      return;
+    }
+  }
+
+  // 8.3 POST /api/library/empty-trash: Permanently empty all deleted mangas
+  if (req.method === 'POST' && pathname === '/api/library/empty-trash') {
+    try {
+      const count = db.emptyTrash();
+      sendJson(res, 200, { status: 'ok', emptied: count });
       return;
     } catch (err) {
       sendError(res, 500, err.message);

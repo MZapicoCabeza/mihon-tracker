@@ -13,6 +13,9 @@ import {
   Sparkles,
   Flame,
   Radio,
+  Trash2,
+  RotateCcw,
+  AlertCircle,
 } from 'lucide-react';
 import { MangaItem, MangaStatus } from '../../types/tracker';
 import { MangaDetailModal } from './MangaDetailModal';
@@ -25,6 +28,8 @@ interface LibraryTabProps {
   mangas: MangaItem[];
   onToggleFavorite: (id: string) => void;
   onUpdateStatus: (id: string, status: MangaStatus) => void;
+  onDeletePermanently?: (id: string) => void;
+  onEmptyTrash?: () => void;
   selectedMangaId?: string | null;
 }
 
@@ -34,7 +39,8 @@ export type LibraryFilterOption =
   | 'on_hold'
   | 'favorites'
   | 'finished_issuing'
-  | 'ongoing_issuing';
+  | 'ongoing_issuing'
+  | 'deleted';
 
 export type LibrarySortOption =
   | 'unread_longest'
@@ -49,6 +55,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   mangas,
   onToggleFavorite,
   onUpdateStatus,
+  onDeletePermanently,
+  onEmptyTrash,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<LibraryFilterOption>('all');
@@ -74,6 +82,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   // Filter & sort logic
   const filteredMangas = useMemo(() => {
     const list = mangas.filter((manga) => {
+      // Trash isolation: deleted items only appear in 'deleted' filter
+      if (activeFilter === 'deleted') {
+        if (manga.status !== 'deleted') return false;
+      } else {
+        if (manga.status === 'deleted') return false;
+      }
+
       const matchesSearch =
         manga.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         manga.genres.some((g) => g.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -81,7 +96,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
       if (!matchesSearch) return false;
 
-      if (activeFilter === 'all') return true;
+      if (activeFilter === 'all' || activeFilter === 'deleted') return true;
       if (activeFilter === 'favorites') return manga.isFavorite;
       if (activeFilter === 'recent_reading') return isRecentlyRead(manga);
       if (activeFilter === 'on_hold') return !isRecentlyRead(manga);
@@ -127,13 +142,19 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
     let onHold = 0;
     let favs = 0;
     let finished = 0;
+    let deleted = 0;
     for (const m of mangas) {
+      if (m.status === 'deleted') {
+        deleted++;
+        continue;
+      }
       if (isRecentlyRead(m)) recent++;
       else onHold++;
       if (m.isFavorite) favs++;
       if (m.status === 'completed') finished++;
     }
-    return { recent, onHold, favs, finished, all: mangas.length };
+    const all = mangas.length - deleted;
+    return { recent, onHold, favs, finished, deleted, all };
   }, [mangas]);
 
   // Grouping logic
@@ -215,8 +236,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
             {/* Top Badges: Recency habit & Publication Status */}
             <div className="flex items-center justify-between gap-1.5 flex-wrap">
               <div className="flex items-center gap-1.5 flex-wrap">
-                {/* 1. Hábitos de Lectura de la Usuaria */}
-                {recent ? (
+                {/* 1. Hábitos de Lectura / Papelera */}
+                {manga.status === 'deleted' ? (
+                  <span className="flex items-center gap-1 text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                    <Trash2 className="w-2.5 h-2.5" />
+                    En papelera
+                  </span>
+                ) : recent ? (
                   <span className="flex items-center gap-1 text-[10px] font-black text-[#047857] bg-[#ECFDF5] px-2 py-0.5 rounded-full border border-[#A7F3D0]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
                     Leyendo últimamente
@@ -308,6 +334,38 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                 </span>
               ) : null}
             </div>
+
+            {/* Quick Actions if In Trash */}
+            {manga.status === 'deleted' && (
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-rose-100 mt-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateStatus(manga.id, 'reading');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold flex items-center gap-1 shadow-2xs transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" /> Restaurar
+                </button>
+                {onDeletePermanently && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        window.confirm(
+                          `¿Eliminar definitivamente "${manga.title}" de la base de datos?`
+                        )
+                      ) {
+                        onDeletePermanently(manga.id);
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-[10px] font-bold flex items-center gap-1 shadow-2xs transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Eliminar
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -423,6 +481,21 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         >
           Emisión finalizada ({counts.finished})
         </button>
+
+        {/* Borrados / Papelera */}
+        <button
+          onClick={() => setActiveFilter('deleted')}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+            activeFilter === 'deleted'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : counts.deleted > 0
+              ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+              : 'bg-white text-[#6B7280] border border-[#E9D5FF]/60 hover:bg-rose-50'
+          }`}
+        >
+          <Trash2 className="w-3 h-3" />
+          Borrados ({counts.deleted})
+        </button>
       </div>
 
       {/* Sorting Selector */}
@@ -493,13 +566,52 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         </div>
       </div>
 
+      {/* Top Banner if in Trash filter */}
+      {activeFilter === 'deleted' && (
+        <div className="mx-1 p-3 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl">🗑️</span>
+            <div className="min-w-0">
+              <h4 className="text-xs font-black text-rose-800">
+                Papelera de Borrados ({counts.deleted})
+              </h4>
+              <p className="text-[10px] text-rose-600 truncate">
+                Estos mangas no aparecen en tu biblioteca activa ni en tus estadísticas.
+              </p>
+            </div>
+          </div>
+          {onEmptyTrash && counts.deleted > 0 && (
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    '¿Vaciar la papelera? Se eliminarán definitivamente todos los mangas en esta sección.'
+                  )
+                ) {
+                  onEmptyTrash();
+                }
+              }}
+              className="py-1 px-2.5 rounded-full bg-rose-600 text-white text-[10px] font-bold shadow-2xs flex-shrink-0 hover:bg-rose-700 transition-colors"
+            >
+              Vaciar papelera
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Manga Cards List */}
       {filteredMangas.length === 0 ? (
         <div className="glass-card p-10 text-center space-y-2.5 my-6">
-          <span className="text-3xl block">🔍</span>
-          <h3 className="text-sm font-black text-[#1E1238]">No se encontraron mangas</h3>
+          <span className="text-3xl block">{activeFilter === 'deleted' ? '🗑️' : '🔍'}</span>
+          <h3 className="text-sm font-black text-[#1E1238]">
+            {activeFilter === 'deleted'
+              ? 'La papelera está vacía'
+              : 'No se encontraron mangas'}
+          </h3>
           <p className="text-xs text-[#6B7280]">
-            Prueba a buscar con otro término o selecciona otro filtro.
+            {activeFilter === 'deleted'
+              ? 'No tienes ningún manhwa en la papelera.'
+              : 'Prueba a buscar con otro término o selecciona otro filtro.'}
           </p>
         </div>
       ) : groupByCategory && groupedData ? (
@@ -561,6 +673,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         onClose={() => setSelectedManga(null)}
         onToggleFavorite={onToggleFavorite}
         onUpdateStatus={onUpdateStatus}
+        onDeletePermanently={onDeletePermanently}
       />
     </div>
   );

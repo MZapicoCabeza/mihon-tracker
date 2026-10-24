@@ -169,4 +169,16 @@ export const apiClient = {
       body: JSON.stringify({ status }),
     });
   },
+
+  async deletePermanently(mangaId: string): Promise<{ status: string; deleted: string }> {
+    return apiFetch(`/api/library/${encodeURIComponent(mangaId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async emptyTrash(): Promise<{ status: string; emptied: number }> {
+    return apiFetch('/api/library/empty-trash', {
+      method: 'POST',
+    });
+  },
 };

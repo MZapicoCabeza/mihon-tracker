@@ -1,4 +1,4 @@
-export type MangaStatus = 'reading' | 'completed' | 'paused';
+export type MangaStatus = 'reading' | 'completed' | 'paused' | 'deleted';
 
 export interface MangaItem {
   id: string;

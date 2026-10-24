@@ -168,8 +168,41 @@ export const App: React.FC = () => {
       await apiClient.updateStatus(id, status);
       const updatedStats = await apiClient.getStats();
       setStats(updatedStats.stats);
+      if (status === 'deleted') {
+        showToast('🗑️ Movido a la papelera (ver en pestaña Borrados)');
+      } else {
+        showToast('✨ Estado actualizado');
+      }
     } catch (err: any) {
       showToast(`Error al cambiar estado: ${err.message}`);
+      refreshAllData(false);
+    }
+  };
+
+  // Permanent delete from database
+  const handleDeletePermanently = async (id: string) => {
+    setMangas((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await apiClient.deletePermanently(id);
+      showToast('🗑️ Manhwa eliminado definitivamente');
+      const updatedStats = await apiClient.getStats();
+      setStats(updatedStats.stats);
+    } catch (err: any) {
+      showToast(`Error al eliminar: ${err.message}`);
+      refreshAllData(false);
+    }
+  };
+
+  // Empty all trash
+  const handleEmptyTrash = async () => {
+    setMangas((prev) => prev.filter((m) => m.status !== 'deleted'));
+    try {
+      const res = await apiClient.emptyTrash();
+      showToast(`🗑️ Papelera vaciada (${res.emptied || 0} eliminados)`);
+      const updatedStats = await apiClient.getStats();
+      setStats(updatedStats.stats);
+    } catch (err: any) {
+      showToast(`Error al vaciar papelera: ${err.message}`);
       refreshAllData(false);
     }
   };
@@ -257,6 +290,8 @@ export const App: React.FC = () => {
                 mangas={mangas}
                 onToggleFavorite={handleToggleFavorite}
                 onUpdateStatus={handleUpdateStatus}
+                onDeletePermanently={handleDeletePermanently}
+                onEmptyTrash={handleEmptyTrash}
               />
             )}
 

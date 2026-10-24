@@ -490,6 +490,27 @@ export class TrackerDatabase {
     return true;
   }
 
+  emptyTrash() {
+    let count = 0;
+    if (this.isSqlite) {
+      const deletedIds = this.db.prepare("SELECT id FROM mangas WHERE status = 'deleted'").all().map(r => r.id);
+      this.db.prepare("DELETE FROM mangas WHERE status = 'deleted'").run();
+      for (const id of deletedIds) {
+        this.db.prepare('DELETE FROM reading_events WHERE manga_id = ?').run(id);
+      }
+      count = deletedIds.length;
+    } else {
+      for (const [id, m] of Object.entries(this.fallbackData.mangas || {})) {
+        if (m.status === 'deleted') {
+          delete this.fallbackData.mangas[id];
+          count++;
+        }
+      }
+      this.saveFallback();
+    }
+    return count;
+  }
+
   purgeNsfw() {
     const keywords = [
       "the duchess' lewd invitation",
@@ -682,13 +703,13 @@ export class TrackerDatabase {
 
     if (this.isSqlite) {
       totalEvents = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
-      totalMangas = this.db.prepare('SELECT COUNT(*) as c FROM mangas').get().c;
+      totalMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status != 'deleted'").get().c;
       completedMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'completed'").get().c;
       readingMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'reading'").get().c;
     } else {
       totalEvents = this.memStore.events.length;
       const mangas = Object.values(this.memStore.mangas);
-      totalMangas = mangas.length;
+      totalMangas = mangas.filter(m => m.status !== 'deleted').length;
       completedMangas = mangas.filter(m => m.status === 'completed').length;
       readingMangas = mangas.filter(m => m.status === 'reading').length;
     }
