@@ -278,6 +278,7 @@ export const App: React.FC = () => {
                 onNavigateTab={(tab) => setCurrentTab(tab)}
                 onToggleFavorite={handleToggleFavorite}
                 onUpdateStatus={handleUpdateStatus}
+                onDeletePermanently={handleDeletePermanently}
                 onRefreshData={async () => {
                   await refreshAllData(false);
                   showToast('✨ Sincronizado con la nube');

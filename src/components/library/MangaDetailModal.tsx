@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Calendar,
@@ -53,9 +54,15 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
     durationText = remainingMonths > 0 ? `${years} años y ${remainingMonths} meses` : `${years} años`;
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1E1238]/60 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-white/95 rounded-3xl p-6 shadow-2xl border border-purple-100 max-h-[90vh] overflow-y-auto no-scrollbar space-y-5">
+  const modalContent = (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[#1E1238]/60 backdrop-blur-md animate-fadeIn"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-purple-100 max-h-[90vh] overflow-y-auto no-scrollbar space-y-5"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -336,4 +343,6 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

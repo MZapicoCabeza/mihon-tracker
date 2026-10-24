@@ -29,6 +29,7 @@ interface DashboardTabProps {
   onNavigateTab?: (tab: 'dashboard' | 'library' | 'stats') => void;
   onToggleFavorite?: (id: string) => void;
   onUpdateStatus?: (id: string, status: MangaStatus) => void;
+  onDeletePermanently?: (id: string) => void;
   onRefreshData?: () => Promise<void>;
 }
 
@@ -41,6 +42,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   onNavigateTab = () => {},
   onToggleFavorite = () => {},
   onUpdateStatus = () => {},
+  onDeletePermanently,
   onRefreshData,
 }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState(6); // Default to today
@@ -76,8 +78,13 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   const totalWeekly = stats.weeklyActivity.reduce((acc, curr) => acc + curr.chapters, 0);
   const activeDay = weeklyDays[selectedDayIndex] || weeklyDays[weeklyDays.length - 1];
 
-  const handleMangaCardClick = (mangaId: string) => {
-    const found = mangas.find((m) => m.id === mangaId);
+  const handleMangaCardClick = (mangaId: string, mangaTitle?: string) => {
+    let found = mangas.find((m) => m.id === mangaId);
+    if (!found && mangaTitle) {
+      found = mangas.find(
+        (m) => m.title.toLowerCase().trim() === mangaTitle.toLowerCase().trim()
+      );
+    }
     if (found) {
       setSelectedManga(found);
     } else {
@@ -304,7 +311,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               return (
                 <div
                   key={event.id}
-                  onClick={() => handleMangaCardClick(event.manga_id)}
+                  onClick={() => handleMangaCardClick(event.manga_id, event.manga_title)}
                   className="glass-card p-3 flex items-center gap-3.5 hover:shadow-md hover:border-[#C4B5FD] transition-all cursor-pointer group"
                 >
                   {/* Cover */}
@@ -375,6 +382,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         onClose={() => setSelectedManga(null)}
         onToggleFavorite={onToggleFavorite}
         onUpdateStatus={onUpdateStatus}
+        onDeletePermanently={onDeletePermanently}
       />
 
       {/* Reader Wrapped Modal */}
