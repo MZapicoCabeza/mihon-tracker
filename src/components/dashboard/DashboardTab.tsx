@@ -308,7 +308,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                   className="glass-card p-3 flex items-center gap-3.5 hover:shadow-md hover:border-[#C4B5FD] transition-all cursor-pointer group"
                 >
                   {/* Cover */}
-                  <div className="relative w-12 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#F3EFFC] border border-purple-100 flex items-center justify-center">
+                  <div className="relative w-12 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#EDE9FE] to-[#F3EFFC] border border-purple-100 shadow-2xs">
                     {getCoverSrc(correspondingManga?.coverUrl || event.cover_url) ? (
                       <img
                         src={getCoverSrc(correspondingManga?.coverUrl || event.cover_url)}
@@ -318,10 +318,21 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         loading="lazy"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) {
+                            const fallback = parent.querySelector('.cover-dash-fallback');
+                            if (fallback) fallback.classList.remove('hidden');
+                          }
                         }}
                       />
                     ) : null}
-                    <span className="text-xl">📖</span>
+                    <div
+                      className={`cover-dash-fallback absolute inset-0 flex items-center justify-center text-xl bg-[#EDE9FE] ${
+                        getCoverSrc(correspondingManga?.coverUrl || event.cover_url) ? 'hidden' : ''
+                      }`}
+                    >
+                      📖
+                    </div>
                   </div>
 
                   {/* Info */}
