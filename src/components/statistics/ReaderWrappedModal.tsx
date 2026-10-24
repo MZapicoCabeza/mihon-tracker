@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Sparkles, Trophy, Flame, Heart, BookOpen, Clock, Share2 } from 'lucide-react';
 import { MangaItem, ReadingStats } from '../../types/tracker';
+import { getCoverSrc } from '../../utils/coverUtils';
 
 interface ReaderWrappedModalProps {
   stats: ReadingStats;
@@ -92,8 +93,13 @@ export const ReaderWrappedModal: React.FC<ReaderWrappedModalProps> = ({
           </span>
           <div className="flex items-center gap-3">
             <div className="w-12 h-16 rounded-xl overflow-hidden bg-white/20 flex-shrink-0">
-              {longestReadManga?.coverUrl ? (
-                <img src={longestReadManga.coverUrl} alt="" className="w-full h-full object-cover" />
+              {getCoverSrc(longestReadManga?.coverUrl) ? (
+                <img
+                  src={getCoverSrc(longestReadManga?.coverUrl)}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-xl">📖</div>
               )}

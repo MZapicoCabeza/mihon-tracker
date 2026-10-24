@@ -17,6 +17,7 @@ import { MangaDetailModal } from '../library/MangaDetailModal';
 import { ReaderWrappedModal } from '../statistics/ReaderWrappedModal';
 import { MangaItem, ReadingHistoryEvent, ReadingStats, MangaStatus } from '../../types/tracker';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
+import { getCoverSrc } from '../../utils/coverUtils';
 
 interface DashboardTabProps {
   stats: ReadingStats;
@@ -308,9 +309,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 >
                   {/* Cover */}
                   <div className="relative w-12 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#F3EFFC] border border-purple-100 flex items-center justify-center">
-                    {(event.cover_url || correspondingManga?.coverUrl) ? (
+                    {getCoverSrc(correspondingManga?.coverUrl || event.cover_url) ? (
                       <img
-                        src={event.cover_url || correspondingManga?.coverUrl}
+                        src={getCoverSrc(correspondingManga?.coverUrl || event.cover_url)}
                         alt={event.manga_title}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

@@ -17,6 +17,9 @@ import {
 import { MangaItem, MangaStatus } from '../../types/tracker';
 import { MangaDetailModal } from './MangaDetailModal';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
+import { getCoverSrc } from '../../utils/coverUtils';
+
+export { getCoverSrc };
 
 interface LibraryTabProps {
   mangas: MangaItem[];
@@ -41,15 +44,6 @@ export type LibrarySortOption =
   | 'title';
 
 const RECENCY_THRESHOLD_DAYS = 45;
-
-export const getCoverSrc = (url?: string): string => {
-  if (!url || !url.startsWith('http')) return '';
-  if (url.includes('otakuteca.com')) return '';
-  if (url.includes('mangadex.org') || url.includes('ikigaimangas.cloud')) {
-    return url;
-  }
-  return `/api/cover-proxy?url=${encodeURIComponent(url)}`;
-};
 
 export const LibraryTab: React.FC<LibraryTabProps> = ({
   mangas,

@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Calendar, Clock, BookOpen, Heart, Sparkles, CheckCircle2, PauseCircle, PlayCircle } from 'lucide-react';
 import { MangaItem, MangaStatus } from '../../types/tracker';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
-import { getCoverSrc } from './LibraryTab';
+import { getCoverSrc } from '../../utils/coverUtils';
 
 interface MangaDetailModalProps {
   manga: MangaItem | null;

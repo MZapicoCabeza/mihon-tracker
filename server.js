@@ -423,6 +423,31 @@ export async function handleRequest(req, res) {
     }
   }
 
+  // 8.1 POST /api/library/purge-nsfw: Purge all adult and hentai titles
+  if (req.method === 'POST' && pathname === '/api/library/purge-nsfw') {
+    try {
+      const purged = db.purgeNsfw();
+      sendJson(res, 200, { status: 'ok', purged });
+      return;
+    } catch (err) {
+      sendError(res, 500, err.message);
+      return;
+    }
+  }
+
+  // 8.2 DELETE /api/library/:id: Delete specific manga
+  if (req.method === 'DELETE' && pathname.startsWith('/api/library/')) {
+    const id = decodeURIComponent(pathname.replace('/api/library/', ''));
+    try {
+      db.deleteManga(id);
+      sendJson(res, 200, { status: 'ok', deleted: id });
+      return;
+    } catch (err) {
+      sendError(res, 500, err.message);
+      return;
+    }
+  }
+
   // 9. POST /api/reset (Testing / Dev only)
   if (req.method === 'POST' && pathname === '/api/reset') {
     if (process.env.NODE_ENV !== 'test' && !isAuthorized(req)) {

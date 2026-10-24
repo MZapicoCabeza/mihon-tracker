@@ -478,6 +478,48 @@ export class TrackerDatabase {
     }
   }
 
+  deleteManga(id) {
+    if (this.isSqlite) {
+      this.db.prepare('DELETE FROM mangas WHERE id = ?').run(id);
+      this.db.prepare('DELETE FROM reading_events WHERE manga_id = ?').run(id);
+    } else {
+      delete this.fallbackData.mangas[id];
+      this.fallbackData.readingEvents = (this.fallbackData.readingEvents || []).filter(e => e.manga_id !== id);
+      this.saveFallback();
+    }
+    return true;
+  }
+
+  purgeNsfw() {
+    const keywords = [
+      "the duchess' lewd invitation",
+      "fragmento caliente de una santa caída",
+      "sé que no debería estar haciendo esto con el duque",
+      "breaking a romantic fantasy villain",
+      "hice algo increíble para la investigación libre",
+      "vacaciones de verano calientes",
+      "sextudy group"
+    ];
+    let purged = 0;
+    if (this.isSqlite) {
+      for (const kw of keywords) {
+        const res = this.db.prepare('DELETE FROM mangas WHERE LOWER(title) LIKE ?').run(`%${kw}%`);
+        this.db.prepare('DELETE FROM reading_events WHERE LOWER(manga_title) LIKE ?').run(`%${kw}%`);
+        purged += res.changes || 0;
+      }
+    } else {
+      for (const [id, m] of Object.entries(this.fallbackData.mangas || {})) {
+        const t = (m.title || '').toLowerCase();
+        if (keywords.some(k => t.includes(k))) {
+          delete this.fallbackData.mangas[id];
+          purged++;
+        }
+      }
+      this.saveFallback();
+    }
+    return purged;
+  }
+
   // --- READING EVENTS & TRACKING ---
 
   recordReadingEvent(eventData) {
