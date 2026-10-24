@@ -42,6 +42,15 @@ export type LibrarySortOption =
 
 const RECENCY_THRESHOLD_DAYS = 45;
 
+export const getCoverSrc = (url?: string): string => {
+  if (!url || !url.startsWith('http')) return '';
+  if (url.includes('otakuteca.com')) return '';
+  if (url.includes('mangadex.org') || url.includes('ikigaimangas.cloud')) {
+    return url;
+  }
+  return `/api/cover-proxy?url=${encodeURIComponent(url)}`;
+};
+
 export const LibraryTab: React.FC<LibraryTabProps> = ({
   mangas,
   onToggleFavorite,
@@ -160,16 +169,14 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       >
         {/* Cover Image with Cross-Origin & Hotlink Protection */}
         <div className="relative w-20 h-28 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#EDE9FE] to-[#F3EFFC] border border-purple-100 shadow-2xs">
-          {manga.coverUrl ? (
+          {getCoverSrc(manga.coverUrl) ? (
             <img
-              src={manga.coverUrl}
+              src={getCoverSrc(manga.coverUrl)}
               alt={manga.title}
               referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
               onError={(e) => {
-                // Hide broken img tag gracefully and show fallback
                 e.currentTarget.style.display = 'none';
                 const parent = e.currentTarget.parentElement;
                 if (parent) {
@@ -183,7 +190,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           {/* Elegant fallback card when image fails or is absent */}
           <div
             className={`cover-fallback absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-gradient-to-br from-[#ECE7FC] to-[#F5F3FF] text-[#6B21A8] ${
-              manga.coverUrl ? 'hidden' : ''
+              getCoverSrc(manga.coverUrl) ? 'hidden' : ''
             }`}
           >
             <span className="text-2xl mb-1 drop-shadow-xs">📖</span>

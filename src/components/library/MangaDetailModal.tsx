@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Calendar, Clock, BookOpen, Heart, Sparkles, CheckCircle2, PauseCircle, PlayCircle } from 'lucide-react';
 import { MangaItem, MangaStatus } from '../../types/tracker';
 import { formatRelativeTimeSpanish } from '../../utils/dateUtils';
+import { getCoverSrc } from './LibraryTab';
 
 interface MangaDetailModalProps {
   manga: MangaItem | null;
@@ -52,12 +53,11 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
         {/* Top Header with Cover */}
         <div className="flex gap-4 items-start">
           <div className="w-24 h-36 rounded-2xl overflow-hidden flex-shrink-0 shadow-md border border-purple-100 bg-gradient-to-br from-[#EDE9FE] to-[#F3EFFC] relative">
-            {manga.coverUrl ? (
+            {getCoverSrc(manga.coverUrl) ? (
               <img
-                src={manga.coverUrl}
+                src={getCoverSrc(manga.coverUrl)}
                 alt={manga.title}
                 referrerPolicy="no-referrer"
-                crossOrigin="anonymous"
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -72,7 +72,7 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
 
             <div
               className={`cover-modal-fallback absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-gradient-to-br from-[#ECE7FC] to-[#F5F3FF] text-[#6B21A8] ${
-                manga.coverUrl ? 'hidden' : ''
+                getCoverSrc(manga.coverUrl) ? 'hidden' : ''
               }`}
             >
               <span className="text-3xl mb-1">📖</span>

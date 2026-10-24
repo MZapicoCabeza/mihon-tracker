@@ -313,7 +313,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         src={event.cover_url || correspondingManga?.coverUrl}
                         alt={event.manga_title}
                         referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
                         onError={(e) => {
