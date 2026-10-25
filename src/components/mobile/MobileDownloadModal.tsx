@@ -76,24 +76,24 @@ export const MobileDownloadModal: React.FC<MobileDownloadModalProps> = ({ isOpen
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-[10px] font-black text-[#047857] uppercase bg-[#ECFDF5] px-2.5 py-0.5 rounded-full inline-block">
-                  Lector Modificado
+                  Lector Oficial Mihon v0.21.3
                 </span>
                 <h3 className="text-sm font-black text-[#1E1238] mt-1">
-                  Mihon Sync (v1.0.0-10)
+                  Mihon con Tracker Integrado
                 </h3>
                 <p className="text-[#6B7280] text-[11px] font-medium mt-0.5">
-                  Sincronización en tiempo real sin perder tu Mihon original
+                  Versión v0.21.3 con sincronización automática en tiempo real
                 </p>
               </div>
               <Sparkles className="w-5 h-5 text-[#F59E0B] flex-shrink-0" />
             </div>
 
             <a
-              href="https://github.com/MZapicoCabeza/mihon/releases/download/mihon-v1.0.0-10/app-dev-arm64-v8a.apk"
+              href="https://github.com/MZapicoCabeza/mihon/releases/download/mihon-v1.0.0-12/app-arm64-v8a-release.apk"
               className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-bold text-xs shadow-xs hover:brightness-105 transition-all"
             >
               <Download className="w-4 h-4" />
-              <span>Descargar APK Mihon Sync</span>
+              <span>Descargar APK Mihon v0.21.3 (ARM64)</span>
             </a>
           </div>
 
