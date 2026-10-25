@@ -1194,6 +1194,7 @@ export class TrackerDatabase {
       recordMonth: extended.recordMonth,
       timelineByYear: extended.timelineByYear,
       heatmapData: extended.heatmapData,
+      dailyMangaCalendar: extended.dailyMangaCalendar || {},
       habits: extended.habits,
       libraryOverview: extended.libraryOverview,
       lastSyncAt: lastSyncAt || null,

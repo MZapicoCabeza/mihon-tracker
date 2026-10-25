@@ -110,7 +110,7 @@ export async function handleRequest(req, res) {
     sendJson(res, 200, {
       status: 'ok',
       service: 'Mihon Reading Tracker Backend',
-      version: '2.1.0',
+      version: '2.1.1',
       uptime: Math.round(process.uptime()),
       db: db.mode || 'sqlite',
       authRequired: Boolean(API_KEY),
