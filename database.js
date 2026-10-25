@@ -441,34 +441,7 @@ export class TrackerDatabase {
     }
 
     this.setMeta('last_library_sync', new Date().toISOString());
-    this.scheduleSaveSeedData();
     return { total: mangasArray.length, inserted, updated };
-  }
-
-  scheduleSaveSeedData() {
-    if (this.dbPath === ':memory:' || process.env.NODE_ENV === 'test') return;
-    if (this._saveSeedTimer) clearTimeout(this._saveSeedTimer);
-    this._saveSeedTimer = setTimeout(() => {
-      try {
-        const allMangas = this.getAllMangas();
-        let allEvents = [];
-        if (this.isSqlite) {
-          allEvents = this.db.prepare('SELECT * FROM reading_events ORDER BY timestamp DESC LIMIT 10000').all().map(r => this._formatEventRow(r));
-        } else {
-          allEvents = this.memStore?.events || [];
-        }
-        const stats = this.calculateStats();
-        const output = {
-          mangas: allMangas,
-          events: allEvents,
-          stats: stats,
-          lastSyncAt: new Date().toISOString()
-        };
-        fs.writeFileSync(SEED_DATA_FILE, JSON.stringify(output, null, 2), 'utf-8');
-      } catch (e) {
-        // Ignore file write errors if restricted
-      }
-    }, 2000);
   }
 
   updateMangaChapter(id, newChapter) {
@@ -504,7 +477,6 @@ export class TrackerDatabase {
       source: 'app-reader',
     });
 
-    this.scheduleSaveSeedData();
     return this.getMangaById(id);
   }
 
@@ -512,7 +484,6 @@ export class TrackerDatabase {
     if (this.isSqlite) {
       const stmt = this.db.prepare('UPDATE mangas SET is_favorite = ?, updated_at = ? WHERE id = ?');
       stmt.run(isFavorite ? 1 : 0, new Date().toISOString(), id.toString());
-      this.scheduleSaveSeedData();
       return this.getMangaById(id);
     } else {
       const manga = this.getMangaById(id);
@@ -521,7 +492,6 @@ export class TrackerDatabase {
         manga.updatedAt = new Date().toISOString();
         this.saveFallback();
       }
-      this.scheduleSaveSeedData();
       return manga;
     }
   }
@@ -530,7 +500,6 @@ export class TrackerDatabase {
     if (this.isSqlite) {
       const stmt = this.db.prepare('UPDATE mangas SET status = ?, updated_at = ? WHERE id = ?');
       stmt.run(status, new Date().toISOString(), id.toString());
-      this.scheduleSaveSeedData();
       return this.getMangaById(id);
     } else {
       const manga = this.getMangaById(id);
@@ -539,7 +508,6 @@ export class TrackerDatabase {
         manga.updatedAt = new Date().toISOString();
         this.saveFallback();
       }
-      this.scheduleSaveSeedData();
       return manga;
     }
   }
@@ -670,8 +638,6 @@ export class TrackerDatabase {
         genres: Array.isArray(eventData.genres) ? eventData.genres : [],
         lastReadAt: timestamp,
       });
-
-      this.scheduleSaveSeedData();
       return {
         isDuplicate: false,
         event: this.getEventById(id),
@@ -707,7 +673,6 @@ export class TrackerDatabase {
       });
 
       this.saveFallback();
-      this.scheduleSaveSeedData();
       return { isDuplicate: false, event: newEvent };
     }
   }
