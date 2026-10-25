@@ -98,32 +98,21 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     <div className="space-y-4 pb-28 animate-fadeIn">
       {/* Top Header Card inspired by Reference Image */}
       <div className="pt-2 px-1">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] p-0.5 shadow-sm shadow-purple-500/20">
-              <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-sm font-black text-[#7C3AED]">
-                📖
-              </div>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider block">
-                Mihon Tracker Cloud
-              </span>
-              <h1 className="text-xl font-black text-[#1E1238] tracking-tight leading-none">
-                Hola, Lectora 👋
-              </h1>
-            </div>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div>
+            <span className="text-[10px] font-bold text-[#7C3AED] uppercase tracking-wider block">
+              Tu Progreso Diario
+            </span>
+            <h1 className="text-xl font-black text-[#1E1238] tracking-tight leading-tight">
+              Hola, Lectora 👋
+            </h1>
           </div>
-
-          {/* Sync Pill */}
-          <button
-            onClick={handleSyncClick}
-            disabled={isSyncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#E9D5FF] text-xs font-bold text-[#7C3AED] shadow-xs hover:bg-[#F3E8FF] active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-[#047857] bg-[#ECFDF5] border border-[#A7F3D0] px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
+              Sincronizado
+            </span>
+          </div>
         </div>
 
         {/* Two Large Vibrant Cards (Like "Create Note" & "Create Task" in Reference) */}
@@ -276,45 +265,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             );
           })}
         </div>
-      </div>
-
-      {/* Quick Action Navigation Buttons */}
-      <div className="grid grid-cols-4 gap-2 px-1 text-center">
-        <button
-          onClick={() => onNavigateTab('library')}
-          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#8B5CF6] transition-all"
-        >
-          <BookOpen className="w-5 h-5 text-[#8B5CF6] mx-auto mb-1" />
-          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">Biblioteca</span>
-          <span className="text-[9px] text-[#6B7280] font-semibold">{mangas.length} obras</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateTab('stats')}
-          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#EC4899] transition-all"
-        >
-          <Trophy className="w-5 h-5 text-[#EC4899] mx-auto mb-1" />
-          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">Podio</span>
-          <span className="text-[9px] text-[#6B7280] font-semibold">Fidelidad</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateTab('stats')}
-          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#F59E0B] transition-all"
-        >
-          <CalendarIcon className="w-5 h-5 text-[#F59E0B] mx-auto mb-1" />
-          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">GitHub</span>
-          <span className="text-[9px] text-[#6B7280] font-semibold">Calendario</span>
-        </button>
-
-        <button
-          onClick={() => setIsWrappedOpen(true)}
-          className="p-3 rounded-2xl bg-white border border-[#E9D5FF]/70 shadow-2xs hover:border-[#10B981] transition-all"
-        >
-          <Sparkles className="w-5 h-5 text-[#10B981] mx-auto mb-1" />
-          <span className="text-[10px] font-black text-[#1E1238] block leading-tight">Wrapped</span>
-          <span className="text-[9px] text-[#6B7280] font-semibold">Tu Historia</span>
-        </button>
       </div>
 
       {/* Recently Read Section */}

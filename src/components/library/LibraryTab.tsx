@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Heart,
@@ -32,6 +32,7 @@ interface LibraryTabProps {
   onEmptyTrash?: () => void;
   selectedMangaId?: string | null;
   onUpdateChapter?: (id: string, chapter: number) => void;
+  initialFilter?: LibraryFilterOption;
 }
 
 export type LibraryFilterOption =
@@ -60,9 +61,16 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   onEmptyTrash,
   selectedMangaId,
   onUpdateChapter,
+  initialFilter,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState<LibraryFilterOption>('all');
+  const [activeFilter, setActiveFilter] = useState<LibraryFilterOption>(initialFilter || 'all');
+
+  useEffect(() => {
+    if (initialFilter) {
+      setActiveFilter(initialFilter);
+    }
+  }, [initialFilter]);
   const [sortBy, setSortBy] = useState<LibrarySortOption>('duration');
   const [groupByCategory, setGroupByCategory] = useState(false);
   const [selectedManga, setSelectedManga] = useState<MangaItem | null>(null);

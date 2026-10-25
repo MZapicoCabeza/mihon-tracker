@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
   Clock,
@@ -31,6 +31,7 @@ interface StatisticsTabProps {
   mangas?: MangaItem[];
   onToggleFavorite?: (id: string) => void;
   onUpdateStatus?: (id: string, status: MangaStatus) => void;
+  initialSection?: SubSection;
 }
 
 type SubSection = 'actividad' | 'historia' | 'mangas' | 'habitos';
@@ -41,8 +42,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   mangas = [],
   onToggleFavorite = () => {},
   onUpdateStatus = () => {},
+  initialSection,
 }) => {
-  const [activeSection, setActiveSection] = useState<SubSection>('actividad');
+  const [activeSection, setActiveSection] = useState<SubSection>(initialSection || 'actividad');
+
+  useEffect(() => {
+    if (initialSection) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
   const [metricUnit, setMetricUnit] = useState<MetricUnit>('chapters');
   const [isWrappedOpen, setIsWrappedOpen] = useState(false);
   const [selectedManga, setSelectedManga] = useState<MangaItem | null>(null);

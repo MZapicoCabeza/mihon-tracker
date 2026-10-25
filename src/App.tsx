@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BottomNavigation, TabType } from './components/layout/BottomNavigation';
+import { TopStatusBar } from './components/layout/TopStatusBar';
+import { LeftDrawer } from './components/layout/LeftDrawer';
 import { DashboardTab } from './components/dashboard/DashboardTab';
 import { LibraryTab } from './components/library/LibraryTab';
 import { StatisticsTab } from './components/statistics/StatisticsTab';
 import { SyncSettingsModal } from './components/sync/SyncSettingsModal';
 import { MobileDownloadModal } from './components/mobile/MobileDownloadModal';
+import { ReaderWrappedModal } from './components/statistics/ReaderWrappedModal';
 import { EMPTY_STATS } from './data/mockData';
 import { MangaItem, MangaStatus, ReadingHistoryEvent, ReadingStats } from './types/tracker';
 import { apiClient } from './utils/apiClient';
@@ -25,6 +28,11 @@ export const App: React.FC = () => {
   // Modals & feedback
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
+  const [isWrappedOpen, setIsWrappedOpen] = useState(false);
+  const [libraryInitialFilter, setLibraryInitialFilter] = useState<'all' | 'deleted'>('all');
+  const [statsInitialSection, setStatsInitialSection] = useState<'actividad' | 'historia' | 'mangas' | 'habitos'>('actividad');
+  const [isSyncing, setIsSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Ref tracking processed event IDs to guarantee idempotency and avoid duplicate processing
@@ -316,107 +324,162 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await refreshAllData(false);
+      showToast('✨ Sincronizado con la nube y Mihon');
+    } catch (err: any) {
+      showToast(`Error al sincronizar: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      showToast('Generando archivo de respaldo...');
+      const lib = await apiClient.getLibrary();
+      const evs = await apiClient.getEvents({ limit: 500 });
+      const sts = await apiClient.getStats();
+
+      const backupObj = {
+        mangas: lib.mangas || mangas,
+        events: evs.events || recentEvents,
+        stats: sts.stats || stats,
+        exportedAt: new Date().toISOString(),
+        version: '1.2',
+      };
+
+      const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mihon_tracker_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('💾 Copia de respaldo descargada');
+    } catch (err: any) {
+      showToast(`Error al exportar: ${err.message}`);
+    }
+  };
+
   const handleSelectManga = (_mangaId: string) => {
     setCurrentTab('library');
   };
 
   return (
     <div className="min-h-screen bg-[#F7F5FC] text-[#1E1238] flex justify-center selection:bg-[#E9D5FF] selection:text-[#5B21B6]">
-      {/* Mobile container wrapper with soft lavender background */}
-      <div className="w-full max-w-md min-h-screen bg-[#F7F5FC] relative px-4 pt-2 flex flex-col">
+      {/* Mobile container wrapper */}
+      <div className="w-full max-w-md min-h-screen bg-[#F7F5FC] relative flex flex-col">
         
-        {/* Floating Toast Notification */}
-        {toastMessage && (
-          <div className="fixed top-4 left-1/2 -translate-y-0 -translate-x-1/2 z-50 w-11/12 max-w-sm flex items-center gap-2.5 p-3 rounded-full bg-[#1E1238]/95 text-white backdrop-blur-xl border border-white/20 shadow-2xl animate-fadeIn">
-            <div className="w-7 h-7 rounded-full bg-[#10B981] flex items-center justify-center flex-shrink-0">
-              <CheckCircle2 className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-xs font-bold text-white flex-1 truncate">{toastMessage}</span>
-          </div>
-        )}
+        {/* Dedicated Top Safe-Area Status Bar that isolates mobile clock, battery & camera notch */}
+        <TopStatusBar
+          onOpenDrawer={() => setIsLeftDrawerOpen(true)}
+          onSyncClick={handleManualSync}
+          isSyncing={isSyncing}
+          currentTab={currentTab}
+        />
 
-        {/* Global Connection Error Banner if Backend is offline (non-blocking) */}
-        {error && !loading && (
-          <div className="mb-3 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-[#1E1238] shadow-xs flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <WifiOff className="w-4 h-4 text-amber-600 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs font-black text-amber-800">Modo Local Activo (Servidor en reposo)</p>
-                <p className="text-[10px] text-amber-600 truncate">Tus lecturas se guardan seguras en este dispositivo</p>
+        {/* Inner Content Area */}
+        <div className="px-4 pt-2 flex-1 flex flex-col">
+          {/* Floating Toast Notification */}
+          {toastMessage && (
+            <div className="fixed top-14 left-1/2 -translate-y-0 -translate-x-1/2 z-50 w-11/12 max-w-sm flex items-center gap-2.5 p-3 rounded-full bg-[#1E1238]/95 text-white backdrop-blur-xl border border-white/20 shadow-2xl animate-fadeIn">
+              <div className="w-7 h-7 rounded-full bg-[#10B981] flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-xs font-bold text-white flex-1 truncate">{toastMessage}</span>
+            </div>
+          )}
+
+          {/* Global Connection Error Banner if Backend is offline (non-blocking) */}
+          {error && !loading && (
+            <div className="mb-3 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-[#1E1238] shadow-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <WifiOff className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-amber-800">Modo Local Activo (Servidor en reposo)</p>
+                  <p className="text-[10px] text-amber-600 truncate">Tus lecturas se guardan seguras en este dispositivo</p>
+                </div>
+              </div>
+              <div className="flex gap-1.5 flex-shrink-0">
+                <button
+                  onClick={() => refreshAllData(false)}
+                  className="py-1 px-2.5 rounded-full bg-white border border-amber-300 text-[10px] font-bold text-amber-800 hover:bg-amber-100 shadow-2xs"
+                >
+                  Reconectar
+                </button>
+                <button
+                  onClick={() => setIsSyncModalOpen(true)}
+                  className="py-1 px-2.5 rounded-full bg-amber-600 text-white text-[10px] font-bold shadow-2xs"
+                >
+                  Ajustes
+                </button>
               </div>
             </div>
-            <div className="flex gap-1.5 flex-shrink-0">
-              <button
-                onClick={() => refreshAllData(false)}
-                className="py-1 px-2.5 rounded-full bg-white border border-amber-300 text-[10px] font-bold text-amber-800 hover:bg-amber-100 shadow-2xs"
-              >
-                Reconectar
-              </button>
-              <button
-                onClick={() => setIsSyncModalOpen(true)}
-                className="py-1 px-2.5 rounded-full bg-amber-600 text-white text-[10px] font-bold shadow-2xs"
-              >
-                Ajustes
-              </button>
+          )}
+
+          {/* Loading Skeleton */}
+          {loading ? (
+            <div className="flex-1 flex flex-col items-center justify-center py-24 space-y-4">
+              <div className="w-12 h-12 rounded-full border-3 border-purple-200 border-t-[#8B5CF6] animate-spin" />
+              <p className="text-xs font-black text-[#1E1238] tracking-wide">
+                Cargando tu biblioteca y progreso...
+              </p>
+              <p className="text-[11px] text-[#6B7280]">
+                Conectando con el servidor en la nube
+              </p>
             </div>
-          </div>
-        )}
+          ) : (
+            /* Main Tab Content */
+            <main className="flex-1">
+              {currentTab === 'dashboard' && (
+                <DashboardTab
+                  stats={stats}
+                  recentEvents={recentEvents}
+                  mangas={mangas}
+                  onSelectManga={handleSelectManga}
+                  onOpenSyncModal={() => setIsSyncModalOpen(true)}
+                  onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
+                  onNavigateTab={(tab) => setCurrentTab(tab)}
+                  onToggleFavorite={handleToggleFavorite}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDeletePermanently={handleDeletePermanently}
+                  onUpdateChapter={handleUpdateChapter}
+                  onRefreshData={async () => {
+                    await refreshAllData(false);
+                    showToast('✨ Sincronizado con la nube');
+                  }}
+                />
+              )}
 
-        {/* Loading Skeleton */}
-        {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-24 space-y-4">
-            <div className="w-12 h-12 rounded-full border-3 border-purple-200 border-t-[#8B5CF6] animate-spin" />
-            <p className="text-xs font-black text-[#1E1238] tracking-wide">
-              Cargando tu biblioteca y progreso...
-            </p>
-            <p className="text-[11px] text-[#6B7280]">
-              Conectando con el servidor en la nube
-            </p>
-          </div>
-        ) : (
-          /* Main Tab Content */
-          <main className="flex-1">
-            {currentTab === 'dashboard' && (
-              <DashboardTab
-                stats={stats}
-                recentEvents={recentEvents}
-                mangas={mangas}
-                onSelectManga={handleSelectManga}
-                onOpenSyncModal={() => setIsSyncModalOpen(true)}
-                onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
-                onNavigateTab={(tab) => setCurrentTab(tab)}
-                onToggleFavorite={handleToggleFavorite}
-                onUpdateStatus={handleUpdateStatus}
-                onDeletePermanently={handleDeletePermanently}
-                onUpdateChapter={handleUpdateChapter}
-                onRefreshData={async () => {
-                  await refreshAllData(false);
-                  showToast('✨ Sincronizado con la nube');
-                }}
-              />
-            )}
+              {currentTab === 'library' && (
+                <LibraryTab
+                  mangas={mangas}
+                  onToggleFavorite={handleToggleFavorite}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDeletePermanently={handleDeletePermanently}
+                  onEmptyTrash={handleEmptyTrash}
+                  onUpdateChapter={handleUpdateChapter}
+                  initialFilter={libraryInitialFilter}
+                />
+              )}
 
-            {currentTab === 'library' && (
-              <LibraryTab
-                mangas={mangas}
-                onToggleFavorite={handleToggleFavorite}
-                onUpdateStatus={handleUpdateStatus}
-                onDeletePermanently={handleDeletePermanently}
-                onEmptyTrash={handleEmptyTrash}
-                onUpdateChapter={handleUpdateChapter}
-              />
-            )}
-
-            {currentTab === 'stats' && (
-              <StatisticsTab
-                stats={stats}
-                mangas={mangas}
-                onToggleFavorite={handleToggleFavorite}
-                onUpdateStatus={handleUpdateStatus}
-              />
-            )}
-          </main>
-        )}
+              {currentTab === 'stats' && (
+                <StatisticsTab
+                  stats={stats}
+                  mangas={mangas}
+                  onToggleFavorite={handleToggleFavorite}
+                  onUpdateStatus={handleUpdateStatus}
+                  initialSection={statsInitialSection}
+                />
+              )}
+            </main>
+          )}
+        </div>
 
         {/* Bottom Navigation */}
         <BottomNavigation
@@ -424,6 +487,37 @@ export const App: React.FC = () => {
           onTabChange={setCurrentTab}
           onOpenSyncModal={() => setIsSyncModalOpen(true)}
         />
+
+        {/* Left Drawer Navigation */}
+        <LeftDrawer
+          isOpen={isLeftDrawerOpen}
+          onClose={() => setIsLeftDrawerOpen(false)}
+          currentTab={currentTab}
+          onSelectTab={(tab) => setCurrentTab(tab)}
+          onNavigateToStatsSection={(section) => {
+            setStatsInitialSection(section);
+            setCurrentTab('stats');
+          }}
+          onNavigateToLibraryFilter={(filter) => {
+            setLibraryInitialFilter(filter);
+            setCurrentTab('library');
+          }}
+          onOpenSyncModal={() => setIsSyncModalOpen(true)}
+          onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
+          onOpenWrapped={() => setIsWrappedOpen(true)}
+          onExportBackup={handleExportBackup}
+          stats={stats}
+          mangas={mangas}
+        />
+
+        {/* Mihon Wrapped Modal */}
+        {isWrappedOpen && (
+          <ReaderWrappedModal
+            stats={stats}
+            mangas={mangas}
+            onClose={() => setIsWrappedOpen(false)}
+          />
+        )}
 
         {/* Sync, Backup & Server Settings Modal */}
         <SyncSettingsModal
