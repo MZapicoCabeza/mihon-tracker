@@ -112,7 +112,7 @@ export async function handleRequest(req, res) {
       service: 'Mihon Reading Tracker Backend',
       version: '2.0.0',
       uptime: Math.round(process.uptime()),
-      db: 'sqlite',
+      db: db.mode || 'sqlite',
       authRequired: Boolean(API_KEY),
     });
     return;
@@ -144,7 +144,7 @@ export async function handleRequest(req, res) {
 
       console.log(`\n⚡ [WEBHOOK RECIBIDO] ${new Date().toLocaleTimeString()} - ${payload.manga_title} Cap. ${payload.chapter_number}`);
 
-      const recordResult = db.recordReadingEvent({
+      const recordResult = await db.recordReadingEvent({
         id: payload.id || payload.event_id,
         manga_id: payload.manga_id.toString(),
         manga_title: payload.manga_title.trim(),
@@ -189,7 +189,7 @@ export async function handleRequest(req, res) {
       const since = searchParams.get('since') || null;
       const sinceId = searchParams.get('sinceId') || null;
 
-      const result = db.getReadingEvents({ limit, offset, since, sinceId });
+      const result = await db.getReadingEvents({ limit, offset, since, sinceId });
       sendJson(res, 200, result);
       return;
     } catch (err) {
@@ -216,7 +216,7 @@ export async function handleRequest(req, res) {
       }
 
       console.log(`\n📚 [LIBRARY SYNC] Syncing ${mangas.length} mangas from Mihon`);
-      const syncResult = db.upsertLibrary(mangas);
+      const syncResult = await db.upsertLibrary(mangas);
 
       sendJson(res, 200, {
         status: 'ok',
@@ -241,7 +241,7 @@ export async function handleRequest(req, res) {
       const isFavorite = favoriteParam !== null ? favoriteParam === 'true' || favoriteParam === '1' : undefined;
       const search = searchParams.get('search') || '';
 
-      const mangas = db.getAllMangas({ status, isFavorite, search });
+      const mangas = await db.getAllMangas({ status, isFavorite, search });
       sendJson(res, 200, {
         mangas,
         total: mangas.length,
@@ -257,7 +257,7 @@ export async function handleRequest(req, res) {
   // 5. GET /api/stats: Dynamically calculate real reading statistics
   if (req.method === 'GET' && pathname === '/api/stats') {
     try {
-      const stats = db.calculateStats();
+      const stats = await db.calculateStats();
       sendJson(res, 200, {
         stats,
       });
@@ -319,7 +319,6 @@ export async function handleRequest(req, res) {
     try {
       const payload = await parseBody(req);
       
-      // Support various backup formats (Mihon JSON export, Tachiyomi JSON, or direct list)
       const backupMangas = payload.backupManga || payload.mangas || [];
       const backupHistory = payload.history || [];
 
@@ -351,7 +350,7 @@ export async function handleRequest(req, res) {
           };
         });
 
-        const syncRes = db.upsertLibrary(formattedMangas);
+        const syncRes = await db.upsertLibrary(formattedMangas);
         importedMangas = syncRes.total;
       }
 
@@ -359,7 +358,7 @@ export async function handleRequest(req, res) {
       if (Array.isArray(backupHistory) && backupHistory.length > 0) {
         for (const h of backupHistory) {
           try {
-            db.recordReadingEvent({
+            await db.recordReadingEvent({
               manga_id: h.manga_id || h.url || 'backup',
               manga_title: h.manga_title || h.title || 'Manga',
               chapter_number: Number(h.chapter_number || h.lastRead || 1),
@@ -395,7 +394,7 @@ export async function handleRequest(req, res) {
     try {
       const payload = await parseBody(req);
       const isFavorite = Boolean(payload.isFavorite);
-      const updated = db.updateMangaFavorite(id, isFavorite);
+      const updated = await db.updateMangaFavorite(id, isFavorite);
       sendJson(res, 200, { status: 'ok', manga: updated });
       return;
     } catch (err) {
@@ -414,7 +413,7 @@ export async function handleRequest(req, res) {
         sendError(res, 400, 'Invalid status. Must be "reading", "completed", "paused", or "deleted"');
         return;
       }
-      const updated = db.updateMangaStatus(id, payload.status);
+      const updated = await db.updateMangaStatus(id, payload.status);
       sendJson(res, 200, { status: 'ok', manga: updated });
       return;
     } catch (err) {
@@ -434,7 +433,7 @@ export async function handleRequest(req, res) {
         sendError(res, 400, 'Invalid chapter number');
         return;
       }
-      const updated = db.updateMangaChapter(id, chapter);
+      const updated = await db.updateMangaChapter(id, chapter);
       sendJson(res, 200, { status: 'ok', manga: updated });
       return;
     } catch (err) {
@@ -446,7 +445,7 @@ export async function handleRequest(req, res) {
   // 8.1 POST /api/library/purge-nsfw: Purge all adult and hentai titles
   if (req.method === 'POST' && pathname === '/api/library/purge-nsfw') {
     try {
-      const purged = db.purgeNsfw();
+      const purged = await db.purgeNsfw();
       sendJson(res, 200, { status: 'ok', purged });
       return;
     } catch (err) {
@@ -459,7 +458,7 @@ export async function handleRequest(req, res) {
   if (req.method === 'DELETE' && pathname.startsWith('/api/library/')) {
     const id = decodeURIComponent(pathname.replace('/api/library/', ''));
     try {
-      db.deleteManga(id);
+      await db.deleteManga(id);
       sendJson(res, 200, { status: 'ok', deleted: id });
       return;
     } catch (err) {
@@ -471,7 +470,7 @@ export async function handleRequest(req, res) {
   // 8.3 POST /api/library/empty-trash: Permanently empty all deleted mangas
   if (req.method === 'POST' && pathname === '/api/library/empty-trash') {
     try {
-      const count = db.emptyTrash();
+      const count = await db.emptyTrash();
       sendJson(res, 200, { status: 'ok', emptied: count });
       return;
     } catch (err) {
@@ -486,7 +485,7 @@ export async function handleRequest(req, res) {
       sendError(res, 403, 'Forbidden: Reset only permitted in test environment or with API key');
       return;
     }
-    db.clearAll();
+    await db.clearAll();
     sendJson(res, 200, { status: 'ok', message: 'All tracker database data cleared' });
     return;
   }

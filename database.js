@@ -2,13 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { createClient } from '@libsql/client';
 
 let DatabaseSync = null;
 try {
   const sqlite = await import('node:sqlite');
   DatabaseSync = sqlite.DatabaseSync;
 } catch (e) {
-  console.warn('⚠️ [DB NOTICE] Native node:sqlite not available on this Node version. Using persistent JSON storage engine.');
+  // Native node:sqlite not available on older Node versions
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,36 +17,144 @@ const __dirname = path.dirname(__filename);
 
 const DB_FILE = process.env.DATABASE_PATH || process.env.DB_FILE || path.join(__dirname, 'tracker.db');
 const JSON_FALLBACK_FILE = path.join(__dirname, 'tracker-fallback.json');
-const MOCK_DB_FILE = path.join(__dirname, 'mock-db.json');
 const SEED_DATA_FILE = path.join(__dirname, 'seed-data.json');
-
-// Ensure directory exists
-const dbDir = path.dirname(DB_FILE);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
 
 export class TrackerDatabase {
   constructor(dbPath = DB_FILE) {
     this.dbPath = dbPath;
-    this.isSqlite = Boolean(DatabaseSync && dbPath !== ':fallback:');
-    
-    if (this.isSqlite) {
-      this.db = new DatabaseSync(dbPath);
-      this.initSchema();
-      this.migrateFromMockDbIfNeeded();
-    } else {
-      this.fallbackPath = dbPath === ':memory:' ? null : JSON_FALLBACK_FILE;
-      this.memStore = { mangas: {}, events: [], meta: {} };
+    this.mode = null;
+    this.client = null;
+    this.db = null;
+    this.initialized = false;
+    this.initPromise = null;
+    this.memStore = { mangas: {}, events: [], meta: {} };
+  }
+
+  async init() {
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      const tursoUrl = process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL;
+      const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
+
+      // 1. Cloud LibSQL / Turso engine
+      if (tursoUrl && this.dbPath !== ':memory:' && this.dbPath !== ':fallback:') {
+        try {
+          this.client = createClient({
+            url: tursoUrl,
+            authToken: tursoAuthToken,
+          });
+          this.mode = 'turso';
+          this.initialized = true;
+          console.log(`☁️ [TURSO DB] Connected to Turso cloud database: ${tursoUrl.replace(/:[^:]*@/, ':***@')}`);
+          await this.initSchema();
+          await this.seedIfNeeded();
+          return;
+        } catch (err) {
+          console.error(`❌ [TURSO DB] Failed to connect to Turso: ${err.message}. Falling back to local engine.`);
+          this.mode = null;
+          this.initialized = false;
+        }
+      }
+
+      // 2. Native SQLite (node:sqlite)
+      if (DatabaseSync && this.dbPath !== ':fallback:') {
+        if (this.dbPath !== ':memory:') {
+          const dbDir = path.dirname(this.dbPath);
+          if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+          }
+        }
+        this.mode = 'sqlite';
+        this.db = new DatabaseSync(this.dbPath);
+        this.initialized = true;
+        console.log(`💾 [LOCAL SQLITE] Connected to SQLite database at: ${this.dbPath}`);
+        await this.initSchema();
+        await this.seedIfNeeded();
+        return;
+      }
+
+      // 3. Persistent JSON storage fallback
+      this.mode = 'json';
+      this.initialized = true;
+      this.fallbackPath = this.dbPath === ':memory:' ? null : JSON_FALLBACK_FILE;
+      console.warn('⚠️ [DB NOTICE] Native SQLite not available. Using persistent JSON storage engine.');
       this.loadFallback();
+    })();
+
+    return this.initPromise;
+  }
+
+  // --- QUERY ABSTRACTION (TURSO / SQLITE) ---
+
+  async queryAll(sql, params = []) {
+    if (!this.initialized) await this.init();
+    if (this.mode === 'turso') {
+      const res = await this.client.execute({ sql, args: params });
+      return res.rows.map(r => ({ ...r }));
+    } else if (this.mode === 'sqlite') {
+      return this.db.prepare(sql).all(...params);
+    }
+    return [];
+  }
+
+  async queryGet(sql, params = []) {
+    if (!this.initialized) await this.init();
+    if (this.mode === 'turso') {
+      const res = await this.client.execute({ sql, args: params });
+      return res.rows[0] ? { ...res.rows[0] } : null;
+    } else if (this.mode === 'sqlite') {
+      const row = this.db.prepare(sql).get(...params);
+      return row ? { ...row } : null;
+    }
+    return null;
+  }
+
+  async queryRun(sql, params = []) {
+    if (!this.initialized) await this.init();
+    if (this.mode === 'turso') {
+      const res = await this.client.execute({ sql, args: params });
+      return { changes: res.rowsAffected, lastInsertRowid: res.lastInsertRowid };
+    } else if (this.mode === 'sqlite') {
+      const res = this.db.prepare(sql).run(...params);
+      return { changes: res.changes, lastInsertRowid: res.lastInsertRowid };
+    }
+    return { changes: 0 };
+  }
+
+  async queryBatch(statements) {
+    if (!this.initialized) await this.init();
+    if (!statements || statements.length === 0) return;
+
+    if (this.mode === 'turso') {
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+        const chunk = statements.slice(i, i + CHUNK_SIZE).map(s => ({
+          sql: s.sql,
+          args: s.args || s.params || []
+        }));
+        await this.client.batch(chunk, 'write');
+      }
+    } else if (this.mode === 'sqlite') {
+      this.db.exec('BEGIN TRANSACTION');
+      try {
+        for (const s of statements) {
+          this.db.prepare(s.sql).run(...(s.args || s.params || []));
+        }
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw err;
+      }
     }
   }
 
-  // --- SQLITE ENGINE ---
+  // --- SCHEMA INITIALIZATION & SEED ---
 
-  initSchema() {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS mangas (
+  async initSchema() {
+    const tableStatements = [
+      `CREATE TABLE IF NOT EXISTS mangas (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         cover_url TEXT DEFAULT '',
@@ -63,9 +172,8 @@ export class TrackerDatabase {
         reading_months INTEGER DEFAULT 0,
         created_at TEXT DEFAULT '',
         updated_at TEXT DEFAULT ''
-      );
-
-      CREATE TABLE IF NOT EXISTS reading_events (
+      )`,
+      `CREATE TABLE IF NOT EXISTS reading_events (
         id TEXT PRIMARY KEY,
         manga_id TEXT NOT NULL,
         manga_title TEXT NOT NULL,
@@ -77,102 +185,86 @@ export class TrackerDatabase {
         received_at TEXT NOT NULL,
         source TEXT DEFAULT 'mihon',
         event_hash TEXT UNIQUE
-      );
-
-      CREATE TABLE IF NOT EXISTS sync_meta (
+      )`,
+      `CREATE TABLE IF NOT EXISTS sync_meta (
         key TEXT PRIMARY KEY,
         value TEXT
-      );
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_events_manga_id ON reading_events(manga_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON reading_events(timestamp DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_events_hash ON reading_events(event_hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_mangas_status ON mangas(status)`,
+      `CREATE INDEX IF NOT EXISTS idx_mangas_last_read ON mangas(last_read_at DESC)`
+    ];
 
-      CREATE INDEX IF NOT EXISTS idx_events_manga_id ON reading_events(manga_id);
-      CREATE INDEX IF NOT EXISTS idx_events_timestamp ON reading_events(timestamp DESC);
-      CREATE INDEX IF NOT EXISTS idx_events_hash ON reading_events(event_hash);
-      CREATE INDEX IF NOT EXISTS idx_mangas_status ON mangas(status);
-      CREATE INDEX IF NOT EXISTS idx_mangas_last_read ON mangas(last_read_at DESC);
-    `);
+    if (this.mode === 'turso') {
+      for (const sql of tableStatements) {
+        await this.client.execute(sql);
+      }
+    } else if (this.mode === 'sqlite') {
+      for (const sql of tableStatements) {
+        this.db.exec(sql);
+      }
+    }
 
     try {
-      this.db.exec("ALTER TABLE mangas ADD COLUMN started_at TEXT DEFAULT ''");
+      await this.queryRun("ALTER TABLE mangas ADD COLUMN started_at TEXT DEFAULT ''");
     } catch (e) {}
     try {
-      this.db.exec("ALTER TABLE mangas ADD COLUMN reading_months INTEGER DEFAULT 0");
+      await this.queryRun("ALTER TABLE mangas ADD COLUMN reading_months INTEGER DEFAULT 0");
     } catch (e) {}
   }
 
-  migrateFromMockDbIfNeeded() {
+  async seedIfNeeded() {
     try {
       if (this.dbPath === ':memory:') return;
-      const eventCount = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
+      const countRow = await this.queryGet('SELECT COUNT(*) as c FROM reading_events');
+      const eventCount = countRow ? Number(countRow.c) : 0;
 
-      // Primary: Seed full historical dataset (2023-2026) from seed-data.json if DB is empty or has mock data
+      // Primary: Seed full historical dataset (2023-2026) from seed-data.json if DB is empty (< 100 events)
       if (eventCount < 100 && fs.existsSync(SEED_DATA_FILE)) {
-        console.log(`📦 [DB SEED] Seeding complete historical dataset (2023-2026) from seed-data.json...`);
+        console.log(`📦 [DB SEED] Seeding complete historical dataset (2023-2026) from seed-data.json into ${this.mode}...`);
         const raw = fs.readFileSync(SEED_DATA_FILE, 'utf-8');
         const data = JSON.parse(raw);
 
         if (Array.isArray(data.mangas) && data.mangas.length > 0) {
-          this.upsertLibrary(data.mangas);
+          await this.upsertLibrary(data.mangas);
         }
 
         if (Array.isArray(data.events) && data.events.length > 0) {
-          this.db.exec('BEGIN TRANSACTION');
-          try {
-            const insertStmt = this.db.prepare(`
-              INSERT OR IGNORE INTO reading_events (
-                id, manga_id, manga_title, chapter_number, chapter_id,
-                cover_url, genres, timestamp, received_at, source, event_hash
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-
-            for (const ev of data.events) {
-              const mangaId = (ev.manga_id || ev.mangaId || '').toString();
-              const chapterNum = Number(ev.chapter_number ?? ev.chapterNumber ?? 0);
-              const timestamp = ev.timestamp || ev.received_at || new Date().toISOString();
-              const eventHash = ev.event_hash || ev.eventHash || this.generateEventHash(mangaId, chapterNum, timestamp);
-              const id = ev.id || `evt_${mangaId}_${chapterNum}_${Date.now()}`;
-              const genres = typeof ev.genres === 'string' ? ev.genres : JSON.stringify(Array.isArray(ev.genres) ? ev.genres : []);
-              const coverUrl = ev.cover_url || ev.coverUrl || '';
-              const chapterId = (ev.chapter_id || ev.chapterId || '').toString();
-              const source = ev.source || 'seed-import';
-              const receivedAt = ev.received_at || ev.receivedAt || timestamp;
-
-              insertStmt.run(id, mangaId, ev.manga_title || ev.mangaTitle, chapterNum, chapterId, coverUrl, genres, timestamp, receivedAt, source, eventHash);
-            }
-            this.db.exec('COMMIT');
-            console.log(`✅ [DB SEED] Successfully seeded ${data.mangas?.length || 0} mangas and ${data.events.length} events into SQLite.`);
-          } catch (seedErr) {
-            this.db.exec('ROLLBACK');
-            console.error('❌ [DB SEED] Error committing seed events:', seedErr.message);
-          }
-        }
-        return;
-      }
-
-      if (eventCount === 0 && fs.existsSync(MOCK_DB_FILE)) {
-        const raw = fs.readFileSync(MOCK_DB_FILE, 'utf-8');
-        const data = JSON.parse(raw);
-        if (Array.isArray(data.events) && data.events.length > 0) {
-          console.log(`📦 [DB MIGRATION] Migrating ${data.events.length} legacy events from mock-db.json to SQLite`);
+          const statements = [];
           for (const ev of data.events) {
-            this.recordReadingEvent({
-              id: ev.id,
-              manga_id: ev.manga_id,
-              manga_title: ev.manga_title,
-              chapter_number: ev.chapter_number,
-              cover_url: ev.cover_url,
-              genres: ev.genres,
-              timestamp: ev.timestamp || ev.received_at,
-              source: 'migration-mock-db',
+            const mangaId = (ev.manga_id || ev.mangaId || '').toString();
+            const chapterNum = Number(ev.chapter_number ?? ev.chapterNumber ?? 0);
+            const timestamp = ev.timestamp || ev.received_at || new Date().toISOString();
+            const eventHash = ev.event_hash || ev.eventHash || this.generateEventHash(mangaId, chapterNum, timestamp);
+            const id = ev.id || `evt_${mangaId}_${chapterNum}_${Date.now()}`;
+            const genres = typeof ev.genres === 'string' ? ev.genres : JSON.stringify(Array.isArray(ev.genres) ? ev.genres : []);
+            const coverUrl = ev.cover_url || ev.coverUrl || '';
+            const chapterId = (ev.chapter_id || ev.chapterId || '').toString();
+            const source = ev.source || 'seed-import';
+            const receivedAt = ev.received_at || ev.receivedAt || timestamp;
+
+            statements.push({
+              sql: `
+                INSERT OR IGNORE INTO reading_events (
+                  id, manga_id, manga_title, chapter_number, chapter_id,
+                  cover_url, genres, timestamp, received_at, source, event_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `,
+              args: [id, mangaId, ev.manga_title || ev.mangaTitle, chapterNum, chapterId, coverUrl, genres, timestamp, receivedAt, source, eventHash],
             });
           }
+          await this.queryBatch(statements);
+          console.log(`✅ [DB SEED] Successfully seeded ${data.mangas?.length || 0} mangas and ${data.events.length} events into ${this.mode}.`);
         }
       }
     } catch (err) {
-      console.warn('⚠️ [DB MIGRATION] Notice: Could not migrate from mock-db.json / seed-data.json:', err.message);
+      console.warn(`⚠️ [DB SEED] Notice: Could not seed data: ${err.message}`);
     }
   }
 
-  // --- FALLBACK JSON ENGINE (When Node < 22.5) ---
+  // --- FALLBACK JSON ENGINE ---
 
   loadFallback() {
     if (this.fallbackPath && fs.existsSync(this.fallbackPath)) {
@@ -184,7 +276,6 @@ export class TrackerDatabase {
       }
     }
 
-    // Seed memStore if empty
     if ((!this.memStore.events || this.memStore.events.length < 100) && fs.existsSync(SEED_DATA_FILE)) {
       try {
         const raw = fs.readFileSync(SEED_DATA_FILE, 'utf-8');
@@ -226,8 +317,8 @@ export class TrackerDatabase {
 
   // --- MANGAS / LIBRARY ---
 
-  getAllMangas({ status, isFavorite, search } = {}) {
-    if (this.isSqlite) {
+  async getAllMangas({ status, isFavorite, search } = {}) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
       let sql = 'SELECT * FROM mangas WHERE 1=1';
       const params = [];
 
@@ -246,7 +337,7 @@ export class TrackerDatabase {
       }
 
       sql += " ORDER BY CASE WHEN last_read_at != '' THEN last_read_at ELSE updated_at END DESC";
-      const rows = this.db.prepare(sql).all(...params);
+      const rows = await this.queryAll(sql, params);
       return rows.map(r => this._formatMangaRow(r));
     } else {
       let list = Object.values(this.memStore.mangas);
@@ -265,18 +356,18 @@ export class TrackerDatabase {
     }
   }
 
-  getMangaById(id) {
-    if (this.isSqlite) {
-      const row = this.db.prepare('SELECT * FROM mangas WHERE id = ?').get(id.toString());
+  async getMangaById(id) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const row = await this.queryGet('SELECT * FROM mangas WHERE id = ?', [id.toString()]);
       return row ? this._formatMangaRow(row) : null;
     } else {
       return this.memStore.mangas[id.toString()] || null;
     }
   }
 
-  upsertManga(manga) {
+  async upsertManga(manga) {
     const id = manga.id.toString();
-    const existing = this.getMangaById(id);
+    const existing = await this.getMangaById(id);
     const now = new Date().toISOString();
 
     const title = manga.title || (existing ? existing.title : 'Desconocido');
@@ -286,15 +377,15 @@ export class TrackerDatabase {
     const genres = Array.isArray(manga.genres) ? manga.genres : (existing ? existing.genres : []);
     const author = manga.author || (existing ? existing.author : '');
     const artist = manga.artist || (existing ? existing.artist : '');
-    const source = manga.source || (existing ? existing.source : '');
-    
+    const source = (manga.source !== undefined && manga.source !== null) ? manga.source.toString() : (existing ? existing.source : '');
+
     const isFavorite = (manga.isFavorite !== undefined ? manga.isFavorite : manga.is_favorite) !== undefined
       ? Boolean(manga.isFavorite || manga.is_favorite)
       : (existing ? existing.isFavorite : false);
 
     const rating = Number(manga.rating ?? (existing ? existing.rating : 0));
     const lastReadAt = manga.lastReadAt || manga.last_read_at || (existing ? existing.lastReadAt : '');
-    
+
     let startedAt = manga.startedAt || manga.started_at || (existing ? existing.startedAt : '') || lastReadAt;
     let readingMonths = Number(manga.readingMonths ?? manga.reading_months ?? (existing ? existing.readingMonths : 0));
 
@@ -311,9 +402,9 @@ export class TrackerDatabase {
     // User reading status is strictly manual: defaults to 'reading' and is only changed by explicit user action
     let status = (existing && existing.status) ? existing.status : (manga.status || 'reading');
 
-    if (this.isSqlite) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
       if (existing) {
-        const stmt = this.db.prepare(`
+        await this.queryRun(`
           UPDATE mangas SET
             title = ?,
             cover_url = ?,
@@ -331,8 +422,7 @@ export class TrackerDatabase {
             reading_months = MAX(reading_months, ?),
             updated_at = ?
           WHERE id = ?
-        `);
-        stmt.run(
+        `, [
           title,
           coverUrl,
           currentChapter,
@@ -351,17 +441,16 @@ export class TrackerDatabase {
           readingMonths,
           now,
           id
-        );
+        ]);
         return { id, isNew: false };
       } else {
-        const stmt = this.db.prepare(`
+        await this.queryRun(`
           INSERT INTO mangas (
             id, title, cover_url, current_chapter, total_chapters,
             status, is_favorite, genres, author, artist, source, rating,
             last_read_at, started_at, reading_months, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        stmt.run(
+        `, [
           id,
           title,
           coverUrl,
@@ -379,7 +468,7 @@ export class TrackerDatabase {
           readingMonths,
           now,
           now
-        );
+        ]);
         return { id, isNew: true };
       }
     } else {
@@ -408,57 +497,174 @@ export class TrackerDatabase {
     }
   }
 
-  upsertLibrary(mangasArray) {
+  async upsertLibrary(mangasArray) {
     if (!Array.isArray(mangasArray)) {
       throw new Error('Expected array of mangas');
     }
 
     let inserted = 0;
     let updated = 0;
+    const now = new Date().toISOString();
 
-    if (this.isSqlite) {
-      this.db.exec('BEGIN TRANSACTION');
-      try {
-        for (const item of mangasArray) {
-          if (!item.id || !item.title) continue;
-          const res = this.upsertManga(item);
-          if (res.isNew) inserted++;
-          else updated++;
-        }
-        this.db.exec('COMMIT');
-      } catch (err) {
-        this.db.exec('ROLLBACK');
-        throw err;
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const existingRows = await this.queryAll('SELECT id, current_chapter, total_chapters, status, is_favorite, genres, author, artist, source, rating, last_read_at, started_at, reading_months FROM mangas');
+      const existingMap = new Map();
+      for (const r of existingRows) {
+        existingMap.set(r.id.toString(), r);
       }
+
+      const statements = [];
+
+      for (const manga of mangasArray) {
+        if (!manga.id || !manga.title) continue;
+        const id = manga.id.toString();
+        const existing = existingMap.get(id);
+
+        const title = manga.title || (existing ? existing.title : 'Desconocido');
+        const coverUrl = manga.coverUrl || manga.cover_url || (existing ? existing.cover_url : '');
+        const currentChapter = Number(manga.currentChapter ?? manga.current_chapter ?? (existing ? existing.current_chapter : 0));
+        const totalChapters = Number(manga.totalChapters ?? manga.total_chapters ?? (existing ? existing.total_chapters : 0));
+        const author = manga.author || (existing ? existing.author : '');
+        const artist = manga.artist || (existing ? existing.artist : '');
+        const source = (manga.source !== undefined && manga.source !== null) ? manga.source.toString() : (existing ? existing.source : '');
+        const rating = Number(manga.rating ?? (existing ? existing.rating : 0));
+        const lastReadAt = manga.lastReadAt || manga.last_read_at || (existing ? existing.last_read_at : '');
+
+        let genres = manga.genres;
+        if (!Array.isArray(genres)) {
+          if (typeof genres === 'string') {
+            try { genres = JSON.parse(genres); } catch (e) { genres = []; }
+          } else {
+            genres = existing ? (typeof existing.genres === 'string' ? JSON.parse(existing.genres || '[]') : existing.genres) : [];
+          }
+        }
+
+        const isFavorite = (manga.isFavorite !== undefined ? manga.isFavorite : manga.is_favorite) !== undefined
+          ? Boolean(manga.isFavorite || manga.is_favorite)
+          : (existing ? Boolean(existing.is_favorite) : false);
+
+        let startedAt = manga.startedAt || manga.started_at || (existing ? existing.started_at : '') || lastReadAt;
+        let readingMonths = Number(manga.readingMonths ?? manga.reading_months ?? (existing ? existing.reading_months : 0));
+
+        if (!readingMonths && startedAt) {
+          const s = new Date(startedAt);
+          const e = new Date(lastReadAt || now);
+          if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+            const y = e.getFullYear() - s.getFullYear();
+            const m = e.getMonth() - s.getMonth();
+            readingMonths = Math.max(0, y * 12 + m);
+          }
+        }
+
+        let status = (existing && existing.status) ? existing.status : (manga.status || 'reading');
+
+        if (existing) {
+          updated++;
+          statements.push({
+            sql: `
+              UPDATE mangas SET
+                title = ?,
+                cover_url = ?,
+                current_chapter = MAX(current_chapter, ?),
+                total_chapters = CASE WHEN ? > 0 THEN ? ELSE total_chapters END,
+                status = ?,
+                is_favorite = ?,
+                genres = ?,
+                author = ?,
+                artist = ?,
+                source = ?,
+                rating = ?,
+                last_read_at = CASE WHEN ? != '' THEN ? ELSE last_read_at END,
+                started_at = CASE WHEN started_at = '' OR started_at IS NULL THEN ? ELSE started_at END,
+                reading_months = MAX(reading_months, ?),
+                updated_at = ?
+              WHERE id = ?
+            `,
+            args: [
+              title,
+              coverUrl,
+              currentChapter,
+              totalChapters,
+              totalChapters,
+              status,
+              isFavorite ? 1 : 0,
+              JSON.stringify(genres),
+              author,
+              artist,
+              source,
+              rating,
+              lastReadAt,
+              lastReadAt,
+              startedAt,
+              readingMonths,
+              now,
+              id
+            ]
+          });
+        } else {
+          inserted++;
+          existingMap.set(id, { id, title, current_chapter: currentChapter, total_chapters: totalChapters, status, is_favorite: isFavorite });
+          statements.push({
+            sql: `
+              INSERT INTO mangas (
+                id, title, cover_url, current_chapter, total_chapters,
+                status, is_favorite, genres, author, artist, source, rating,
+                last_read_at, started_at, reading_months, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            args: [
+              id,
+              title,
+              coverUrl,
+              currentChapter,
+              totalChapters,
+              status,
+              isFavorite ? 1 : 0,
+              JSON.stringify(genres),
+              author,
+              artist,
+              source,
+              rating,
+              lastReadAt,
+              startedAt,
+              readingMonths,
+              now,
+              now
+            ]
+          });
+        }
+      }
+
+      await this.queryBatch(statements);
     } else {
       for (const item of mangasArray) {
         if (!item.id || !item.title) continue;
-        const res = this.upsertManga(item);
+        const res = await this.upsertManga(item);
         if (res.isNew) inserted++;
         else updated++;
       }
       this.saveFallback();
     }
 
-    this.setMeta('last_library_sync', new Date().toISOString());
+    await this.setMeta('last_library_sync', now);
     return { total: mangasArray.length, inserted, updated };
   }
 
-  updateMangaChapter(id, newChapter) {
-    const manga = this.getMangaById(id);
+  async updateMangaChapter(id, newChapter) {
+    const manga = await this.getMangaById(id);
     if (!manga) throw new Error('Manga no encontrado');
     const ch = Number(newChapter);
     if (isNaN(ch) || ch < 0) throw new Error('Número de capítulo inválido');
 
     const now = new Date().toISOString();
-    if (this.isSqlite) {
-      this.db.prepare(`
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      await this.queryRun(`
         UPDATE mangas SET
           current_chapter = ?,
           last_read_at = ?,
           updated_at = ?
         WHERE id = ?
-      `).run(ch, now, now, id.toString());
+      `, [ch, now, now, id.toString()]);
     } else {
       manga.currentChapter = ch;
       manga.lastReadAt = now;
@@ -467,7 +673,7 @@ export class TrackerDatabase {
     }
 
     // Record reading event so statistics, streak and history update
-    this.recordReadingEvent({
+    await this.recordReadingEvent({
       manga_id: id.toString(),
       manga_title: manga.title,
       chapter_number: ch,
@@ -477,16 +683,19 @@ export class TrackerDatabase {
       source: 'app-reader',
     });
 
-    return this.getMangaById(id);
+    return await this.getMangaById(id);
   }
 
-  updateMangaFavorite(id, isFavorite) {
-    if (this.isSqlite) {
-      const stmt = this.db.prepare('UPDATE mangas SET is_favorite = ?, updated_at = ? WHERE id = ?');
-      stmt.run(isFavorite ? 1 : 0, new Date().toISOString(), id.toString());
-      return this.getMangaById(id);
+  async updateMangaFavorite(id, isFavorite) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      await this.queryRun('UPDATE mangas SET is_favorite = ?, updated_at = ? WHERE id = ?', [
+        isFavorite ? 1 : 0,
+        new Date().toISOString(),
+        id.toString()
+      ]);
+      return await this.getMangaById(id);
     } else {
-      const manga = this.getMangaById(id);
+      const manga = this.memStore.mangas[id.toString()];
       if (manga) {
         manga.isFavorite = Boolean(isFavorite);
         manga.updatedAt = new Date().toISOString();
@@ -496,13 +705,16 @@ export class TrackerDatabase {
     }
   }
 
-  updateMangaStatus(id, status) {
-    if (this.isSqlite) {
-      const stmt = this.db.prepare('UPDATE mangas SET status = ?, updated_at = ? WHERE id = ?');
-      stmt.run(status, new Date().toISOString(), id.toString());
-      return this.getMangaById(id);
+  async updateMangaStatus(id, status) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      await this.queryRun('UPDATE mangas SET status = ?, updated_at = ? WHERE id = ?', [
+        status,
+        new Date().toISOString(),
+        id.toString()
+      ]);
+      return await this.getMangaById(id);
     } else {
-      const manga = this.getMangaById(id);
+      const manga = this.memStore.mangas[id.toString()];
       if (manga) {
         manga.status = status;
         manga.updatedAt = new Date().toISOString();
@@ -512,31 +724,32 @@ export class TrackerDatabase {
     }
   }
 
-  deleteManga(id) {
-    if (this.isSqlite) {
-      this.db.prepare('DELETE FROM mangas WHERE id = ?').run(id);
-      this.db.prepare('DELETE FROM reading_events WHERE manga_id = ?').run(id);
+  async deleteManga(id) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      await this.queryRun('DELETE FROM mangas WHERE id = ?', [id.toString()]);
+      await this.queryRun('DELETE FROM reading_events WHERE manga_id = ?', [id.toString()]);
     } else {
-      delete this.fallbackData.mangas[id];
-      this.fallbackData.readingEvents = (this.fallbackData.readingEvents || []).filter(e => e.manga_id !== id);
+      delete this.memStore.mangas[id.toString()];
+      this.memStore.events = (this.memStore.events || []).filter(e => e.manga_id !== id.toString());
       this.saveFallback();
     }
     return true;
   }
 
-  emptyTrash() {
+  async emptyTrash() {
     let count = 0;
-    if (this.isSqlite) {
-      const deletedIds = this.db.prepare("SELECT id FROM mangas WHERE status = 'deleted'").all().map(r => r.id);
-      this.db.prepare("DELETE FROM mangas WHERE status = 'deleted'").run();
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const deletedRows = await this.queryAll("SELECT id FROM mangas WHERE status = 'deleted'");
+      const deletedIds = deletedRows.map(r => r.id.toString());
+      await this.queryRun("DELETE FROM mangas WHERE status = 'deleted'");
       for (const id of deletedIds) {
-        this.db.prepare('DELETE FROM reading_events WHERE manga_id = ?').run(id);
+        await this.queryRun('DELETE FROM reading_events WHERE manga_id = ?', [id]);
       }
       count = deletedIds.length;
     } else {
-      for (const [id, m] of Object.entries(this.fallbackData.mangas || {})) {
+      for (const [id, m] of Object.entries(this.memStore.mangas || {})) {
         if (m.status === 'deleted') {
-          delete this.fallbackData.mangas[id];
+          delete this.memStore.mangas[id];
           count++;
         }
       }
@@ -545,7 +758,7 @@ export class TrackerDatabase {
     return count;
   }
 
-  purgeNsfw() {
+  async purgeNsfw() {
     const keywords = [
       "the duchess' lewd invitation",
       "fragmento caliente de una santa caída",
@@ -556,17 +769,17 @@ export class TrackerDatabase {
       "sextudy group"
     ];
     let purged = 0;
-    if (this.isSqlite) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
       for (const kw of keywords) {
-        const res = this.db.prepare('DELETE FROM mangas WHERE LOWER(title) LIKE ?').run(`%${kw}%`);
-        this.db.prepare('DELETE FROM reading_events WHERE LOWER(manga_title) LIKE ?').run(`%${kw}%`);
+        const res = await this.queryRun('DELETE FROM mangas WHERE LOWER(title) LIKE ?', [`%${kw}%`]);
+        await this.queryRun('DELETE FROM reading_events WHERE LOWER(manga_title) LIKE ?', [`%${kw}%`]);
         purged += res.changes || 0;
       }
     } else {
-      for (const [id, m] of Object.entries(this.fallbackData.mangas || {})) {
+      for (const [id, m] of Object.entries(this.memStore.mangas || {})) {
         const t = (m.title || '').toLowerCase();
         if (keywords.some(k => t.includes(k))) {
-          delete this.fallbackData.mangas[id];
+          delete this.memStore.mangas[id];
           purged++;
         }
       }
@@ -577,7 +790,7 @@ export class TrackerDatabase {
 
   // --- READING EVENTS & TRACKING ---
 
-  recordReadingEvent(eventData) {
+  async recordReadingEvent(eventData) {
     if (!eventData.manga_id || !eventData.manga_title || eventData.chapter_number === undefined) {
       throw new Error('Missing required fields: manga_id, manga_title, chapter_number');
     }
@@ -594,9 +807,9 @@ export class TrackerDatabase {
     const eventHash = eventData.event_hash || this.generateEventHash(mangaId, chapterNum, timestamp);
     const id = eventData.id || `evt_${mangaId}_${chapterNum}_${Date.now()}`;
 
-    if (this.isSqlite) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
       // Deduplication check
-      const existing = this.db.prepare('SELECT * FROM reading_events WHERE event_hash = ?').get(eventHash);
+      const existing = await this.queryGet('SELECT * FROM reading_events WHERE event_hash = ?', [eventHash]);
       if (existing) {
         return {
           isDuplicate: true,
@@ -609,14 +822,12 @@ export class TrackerDatabase {
       const chapterId = eventData.chapter_id ? eventData.chapter_id.toString() : '';
       const source = eventData.source || 'mihon';
 
-      const insertStmt = this.db.prepare(`
+      await this.queryRun(`
         INSERT INTO reading_events (
           id, manga_id, manga_title, chapter_number, chapter_id,
           cover_url, genres, timestamp, received_at, source, event_hash
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      insertStmt.run(
+      `, [
         id,
         mangaId,
         eventData.manga_title,
@@ -628,9 +839,9 @@ export class TrackerDatabase {
         receivedAt,
         source,
         eventHash
-      );
+      ]);
 
-      this.upsertManga({
+      await this.upsertManga({
         id: mangaId,
         title: eventData.manga_title,
         coverUrl: coverUrl,
@@ -638,9 +849,10 @@ export class TrackerDatabase {
         genres: Array.isArray(eventData.genres) ? eventData.genres : [],
         lastReadAt: timestamp,
       });
+
       return {
         isDuplicate: false,
-        event: this.getEventById(id),
+        event: await this.getEventById(id),
       };
     } else {
       const existing = this.memStore.events.find(e => e.event_hash === eventHash);
@@ -663,7 +875,7 @@ export class TrackerDatabase {
       };
 
       this.memStore.events.unshift(newEvent);
-      this.upsertManga({
+      await this.upsertManga({
         id: mangaId,
         title: eventData.manga_title,
         coverUrl: eventData.cover_url || '',
@@ -677,17 +889,17 @@ export class TrackerDatabase {
     }
   }
 
-  getEventById(id) {
-    if (this.isSqlite) {
-      const row = this.db.prepare('SELECT * FROM reading_events WHERE id = ?').get(id);
+  async getEventById(id) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const row = await this.queryGet('SELECT * FROM reading_events WHERE id = ?', [id]);
       return row ? this._formatEventRow(row) : null;
     } else {
       return this.memStore.events.find(e => e.id === id) || null;
     }
   }
 
-  getReadingEvents({ limit = 50, offset = 0, since, sinceId } = {}) {
-    if (this.isSqlite) {
+  async getReadingEvents({ limit = 50, offset = 0, since, sinceId } = {}) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
       let sql = 'SELECT * FROM reading_events WHERE 1=1';
       const params = [];
 
@@ -703,8 +915,9 @@ export class TrackerDatabase {
       sql += ' ORDER BY timestamp DESC, received_at DESC LIMIT ? OFFSET ?';
       params.push(Math.min(limit, 200), offset);
 
-      const rows = this.db.prepare(sql).all(...params);
-      const totalCount = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
+      const rows = await this.queryAll(sql, params);
+      const countRow = await this.queryGet('SELECT COUNT(*) as c FROM reading_events');
+      const totalCount = countRow ? Number(countRow.c) : 0;
 
       return {
         events: rows.map(r => this._formatEventRow(r)),
@@ -728,17 +941,23 @@ export class TrackerDatabase {
 
   // --- STATS CALCULATION ---
 
-  calculateStats() {
+  async calculateStats() {
     let totalEvents = 0;
     let totalMangas = 0;
     let completedMangas = 0;
     let readingMangas = 0;
 
-    if (this.isSqlite) {
-      totalEvents = this.db.prepare('SELECT COUNT(*) as c FROM reading_events').get().c;
-      totalMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status != 'deleted'").get().c;
-      completedMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'completed'").get().c;
-      readingMangas = this.db.prepare("SELECT COUNT(*) as c FROM mangas WHERE status = 'reading'").get().c;
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const [evCount, mCount, cCount, rCount] = await Promise.all([
+        this.queryGet('SELECT COUNT(*) as c FROM reading_events'),
+        this.queryGet("SELECT COUNT(*) as c FROM mangas WHERE status != 'deleted'"),
+        this.queryGet("SELECT COUNT(*) as c FROM mangas WHERE status = 'completed'"),
+        this.queryGet("SELECT COUNT(*) as c FROM mangas WHERE status = 'reading'")
+      ]);
+      totalEvents = evCount ? Number(evCount.c) : 0;
+      totalMangas = mCount ? Number(mCount.c) : 0;
+      completedMangas = cCount ? Number(cCount.c) : 0;
+      readingMangas = rCount ? Number(rCount.c) : 0;
     } else {
       totalEvents = this.memStore.events.length;
       const mangas = Object.values(this.memStore.mangas);
@@ -750,7 +969,25 @@ export class TrackerDatabase {
     const totalChaptersRead = totalEvents;
     const estimatedHoursRead = Math.round((totalChaptersRead * 10) / 60);
 
-    const extended = this._calculateExtendedMetrics();
+    const [
+      extended,
+      currentStreakDays,
+      mostActiveObj,
+      favoriteReadingTime,
+      weeklyActivity,
+      monthlyActivity,
+      genreDistribution,
+      lastSyncAt
+    ] = await Promise.all([
+      this._calculateExtendedMetrics(),
+      this._calculateCurrentStreak(),
+      this._calculateMostActiveDay(),
+      this._calculateFavoriteReadingTime(),
+      this._calculateWeeklyActivity(),
+      this._calculateMonthlyActivity(),
+      this._calculateGenreDistribution(),
+      this.getMeta('last_library_sync')
+    ]);
 
     return {
       totalChaptersRead,
@@ -758,18 +995,18 @@ export class TrackerDatabase {
       totalMangaCompleted: completedMangas,
       totalMangaReading: readingMangas,
       totalMangaInLibrary: totalMangas,
-      currentStreakDays: this._calculateCurrentStreak(),
+      currentStreakDays,
       longestStreakDays: extended.longestStreakDays,
       distinctActiveDays: extended.distinctActiveDays,
       earliestReadDate: extended.earliestReadDate,
       latestReadDate: extended.latestReadDate,
       yearsActiveLabel: extended.yearsActiveLabel,
-      mostActiveDay: this._calculateMostActiveDay().mostActiveDay,
-      mostActiveDayAvg: this._calculateMostActiveDay().mostActiveDayAvg,
-      favoriteReadingTime: this._calculateFavoriteReadingTime(),
-      weeklyActivity: this._calculateWeeklyActivity(),
-      monthlyActivity: this._calculateMonthlyActivity(),
-      genreDistribution: this._calculateGenreDistribution(),
+      mostActiveDay: mostActiveObj.mostActiveDay,
+      mostActiveDayAvg: mostActiveObj.mostActiveDayAvg,
+      favoriteReadingTime,
+      weeklyActivity,
+      monthlyActivity,
+      genreDistribution,
       weeklyComparison: extended.weeklyComparison,
       monthlyComparison: extended.monthlyComparison,
       recordDay: extended.recordDay,
@@ -778,18 +1015,80 @@ export class TrackerDatabase {
       heatmapData: extended.heatmapData,
       habits: extended.habits,
       libraryOverview: extended.libraryOverview,
-      lastSyncAt: this.getMeta('last_library_sync') || null,
+      lastSyncAt: lastSyncAt || null,
     };
   }
 
-  _calculateExtendedMetrics() {
-    if (this.isSqlite) {
-      const distinctDays = this.db.prepare('SELECT COUNT(DISTINCT substr(timestamp, 1, 10)) as c FROM reading_events').get().c;
-      const earliestDate = this.db.prepare('SELECT MIN(timestamp) as m FROM reading_events').get().m;
-      const latestDate = this.db.prepare('SELECT MAX(timestamp) as m FROM reading_events').get().m;
+  async _calculateExtendedMetrics() {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const [
+        distinctDaysRow,
+        earliestRow,
+        latestRow,
+        dateRows,
+        topDayRow,
+        topMonthRow,
+        timelineByYear,
+        heatmapRows,
+        thisWeekRow,
+        prevWeekRow,
+        allTimestamps,
+        marathons,
+        retakenSeries,
+        libraryStatuses,
+        chapterTotals,
+        mangasCountRow
+      ] = await Promise.all([
+        this.queryGet('SELECT COUNT(DISTINCT substr(timestamp, 1, 10)) as c FROM reading_events'),
+        this.queryGet('SELECT MIN(timestamp) as m FROM reading_events'),
+        this.queryGet('SELECT MAX(timestamp) as m FROM reading_events'),
+        this.queryAll('SELECT DISTINCT substr(timestamp, 1, 10) as d FROM reading_events ORDER BY d ASC'),
+        this.queryGet('SELECT substr(timestamp, 1, 10) as d, COUNT(*) as c FROM reading_events GROUP BY d ORDER BY c DESC LIMIT 1'),
+        this.queryGet('SELECT substr(timestamp, 1, 7) as m, COUNT(*) as c FROM reading_events GROUP BY m ORDER BY c DESC LIMIT 1'),
+        this.queryAll(`
+          SELECT substr(timestamp, 1, 4) as year, COUNT(*) as chapters, COUNT(DISTINCT manga_id) as series
+          FROM reading_events
+          GROUP BY year
+          ORDER BY year ASC
+        `),
+        this.queryAll(`
+          SELECT substr(timestamp, 1, 10) as date, COUNT(*) as count
+          FROM reading_events
+          WHERE date(timestamp) >= date('now', '-365 days')
+          GROUP BY date
+        `),
+        this.queryGet(`SELECT COUNT(*) as c FROM reading_events WHERE date(timestamp) >= date('now', '-7 days')`),
+        this.queryGet(`SELECT COUNT(*) as c FROM reading_events WHERE date(timestamp) >= date('now', '-14 days') AND date(timestamp) < date('now', '-7 days')`),
+        this.queryAll('SELECT timestamp FROM reading_events ORDER BY timestamp ASC'),
+        this.queryAll(`
+          SELECT manga_id, manga_title, substr(timestamp, 1, 10) as read_date, COUNT(*) as chapters
+          FROM reading_events
+          GROUP BY manga_title, read_date
+          HAVING chapters >= 15
+          ORDER BY chapters DESC
+          LIMIT 6
+        `),
+        this.queryAll(`
+          SELECT m.title, m.id, m.cover_url, m.reading_months,
+                 MIN(e.timestamp) as first_read, MAX(e.timestamp) as last_read,
+                 COUNT(e.id) as chapters
+          FROM reading_events e
+          JOIN mangas m ON e.manga_id = m.id
+          GROUP BY m.id
+          HAVING (julianday(MAX(e.timestamp)) - julianday(MIN(e.timestamp))) >= 60
+          ORDER BY chapters DESC
+          LIMIT 6
+        `),
+        this.queryAll(`SELECT status, COUNT(*) as count FROM mangas GROUP BY status`),
+        this.queryGet(`SELECT SUM(current_chapter) as readChapters, SUM(total_chapters) as totalChapters FROM mangas`),
+        this.queryGet('SELECT COUNT(*) as c FROM mangas')
+      ]);
+
+      const distinctDays = distinctDaysRow ? Number(distinctDaysRow.c) : 0;
+      const earliestDate = earliestRow ? earliestRow.m : null;
+      const latestDate = latestRow ? latestRow.m : null;
 
       // Longest streak
-      const dateRows = this.db.prepare('SELECT DISTINCT substr(timestamp, 1, 10) as d FROM reading_events ORDER BY d ASC').all();
       let maxStreak = 0;
       let curStreak = 0;
       let prevDate = null;
@@ -806,31 +1105,13 @@ export class TrackerDatabase {
         prevDate = curDate;
       }
 
-      // Record day & month
-      const topDayRow = this.db.prepare('SELECT substr(timestamp, 1, 10) as d, COUNT(*) as c FROM reading_events GROUP BY d ORDER BY c DESC LIMIT 1').get();
-      const topMonthRow = this.db.prepare('SELECT substr(timestamp, 1, 7) as m, COUNT(*) as c FROM reading_events GROUP BY m ORDER BY c DESC LIMIT 1').get();
-
-      // Timeline by year
-      const timelineByYear = this.db.prepare(`
-        SELECT substr(timestamp, 1, 4) as year, COUNT(*) as chapters, COUNT(DISTINCT manga_id) as series
-        FROM reading_events
-        GROUP BY year
-        ORDER BY year ASC
-      `).all();
-
       // Heatmap 365 days
-      const heatmapRows = this.db.prepare(`
-        SELECT substr(timestamp, 1, 10) as date, COUNT(*) as count
-        FROM reading_events
-        WHERE date(timestamp) >= date('now', '-365 days')
-        GROUP BY date
-      `).all();
       const heatmapData = {};
-      heatmapRows.forEach(r => { heatmapData[r.date] = r.count; });
+      heatmapRows.forEach(r => { heatmapData[r.date] = Number(r.count); });
 
       // Weekly comparison
-      const thisWeekCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE date(timestamp) >= date('now', '-7 days')`).get().c;
-      const prevWeekCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE date(timestamp) >= date('now', '-14 days') AND date(timestamp) < date('now', '-7 days')`).get().c;
+      const thisWeekCount = thisWeekRow ? Number(thisWeekRow.c) : 0;
+      const prevWeekCount = prevWeekRow ? Number(prevWeekRow.c) : 0;
       const weeklyComparison = {
         thisWeek: thisWeekCount,
         prevWeek: prevWeekCount,
@@ -844,8 +1125,10 @@ export class TrackerDatabase {
       prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
       const prevMonthStr = prevMonthDate.toISOString().slice(0, 7);
 
-      const thisMonthCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE substr(timestamp, 1, 7) = ?`).get(thisMonthStr)?.c || 0;
-      const prevMonthCount = this.db.prepare(`SELECT COUNT(*) as c FROM reading_events WHERE substr(timestamp, 1, 7) = ?`).get(prevMonthStr)?.c || 0;
+      const thisMonthRow = await this.queryGet('SELECT COUNT(*) as c FROM reading_events WHERE substr(timestamp, 1, 7) = ?', [thisMonthStr]);
+      const prevMonthRow = await this.queryGet('SELECT COUNT(*) as c FROM reading_events WHERE substr(timestamp, 1, 7) = ?', [prevMonthStr]);
+      const thisMonthCount = thisMonthRow ? Number(thisMonthRow.c) : 0;
+      const prevMonthCount = prevMonthRow ? Number(prevMonthRow.c) : 0;
       const monthlyComparison = {
         thisMonth: thisMonthCount,
         prevMonth: prevMonthCount,
@@ -854,7 +1137,6 @@ export class TrackerDatabase {
       };
 
       // Habits: Reading Sessions & Marathons
-      const allTimestamps = this.db.prepare('SELECT timestamp FROM reading_events ORDER BY timestamp ASC').all();
       let totalSessions = 0;
       let lastTime = null;
       for (const t of allTimestamps) {
@@ -867,32 +1149,9 @@ export class TrackerDatabase {
       const totalEvents = allTimestamps.length;
       const avgChaptersPerSession = totalSessions > 0 ? (totalEvents / totalSessions).toFixed(1) : '1.0';
 
-      const marathons = this.db.prepare(`
-        SELECT manga_id, manga_title, substr(timestamp, 1, 10) as read_date, COUNT(*) as chapters
-        FROM reading_events
-        GROUP BY manga_title, read_date
-        HAVING chapters >= 15
-        ORDER BY chapters DESC
-        LIMIT 6
-      `).all();
-
-      const retakenSeries = this.db.prepare(`
-        SELECT m.title, m.id, m.cover_url, m.reading_months,
-               MIN(e.timestamp) as first_read, MAX(e.timestamp) as last_read,
-               COUNT(e.id) as chapters
-        FROM reading_events e
-        JOIN mangas m ON e.manga_id = m.id
-        GROUP BY m.id
-        HAVING (julianday(MAX(e.timestamp)) - julianday(MIN(e.timestamp))) >= 60
-        ORDER BY chapters DESC
-        LIMIT 6
-      `).all();
-
       // Library Overview
-      const libraryStatuses = this.db.prepare(`SELECT status, COUNT(*) as count FROM mangas GROUP BY status`).all();
       const statusMap = { reading: 0, completed: 0, paused: 0 };
-      libraryStatuses.forEach(s => { statusMap[s.status] = s.count; });
-      const chapterTotals = this.db.prepare(`SELECT SUM(current_chapter) as readChapters, SUM(total_chapters) as totalChapters FROM mangas`).get();
+      libraryStatuses.forEach(s => { statusMap[s.status] = Number(s.count); });
 
       let yearsActiveLabel = 'Casi 4 años';
       if (earliestDate) {
@@ -912,27 +1171,27 @@ export class TrackerDatabase {
         longestStreakDays: maxStreak,
         recordDay: {
           date: topDayRow?.d || '2025-11-19',
-          chapters: topDayRow?.c || 107,
+          chapters: Number(topDayRow?.c || 0),
         },
         recordMonth: {
           month: topMonthRow?.m || '2026-01',
-          chapters: topMonthRow?.c || 475,
+          chapters: Number(topMonthRow?.c || 0),
         },
-        timelineByYear,
+        timelineByYear: timelineByYear.map(y => ({ year: y.year, chapters: Number(y.chapters), series: Number(y.series) })),
         heatmapData,
         weeklyComparison,
         monthlyComparison,
         habits: {
           totalSessions,
           avgChaptersPerSession,
-          marathons,
-          retakenSeries,
+          marathons: marathons.map(m => ({ manga_id: m.manga_id, manga_title: m.manga_title, read_date: m.read_date, chapters: Number(m.chapters) })),
+          retakenSeries: retakenSeries.map(r => ({ ...r, chapters: Number(r.chapters) })),
         },
         libraryOverview: {
           reading: statusMap.reading || 0,
           completed: statusMap.completed || 0,
           paused: statusMap.paused || 0,
-          totalMangas: this.db.prepare('SELECT COUNT(*) as c FROM mangas').get().c,
+          totalMangas: mangasCountRow ? Number(mangasCountRow.c) : 0,
           totalReadChapters: Math.round(chapterTotals?.readChapters || 0),
           totalAvailableChapters: Math.round(chapterTotals?.totalChapters || 0),
           libraryCompletionRate: chapterTotals?.totalChapters > 0
@@ -941,7 +1200,6 @@ export class TrackerDatabase {
         },
       };
     } else {
-      // Memory fallback
       return {
         distinctActiveDays: new Set(this.memStore.events.map(e => e.timestamp.slice(0, 10))).size,
         earliestReadDate: this.memStore.events[0]?.timestamp || '2024-09-12',
@@ -964,14 +1222,14 @@ export class TrackerDatabase {
     }
   }
 
-  _calculateCurrentStreak() {
+  async _calculateCurrentStreak() {
     let readDates = new Set();
-    if (this.isSqlite) {
-      const rows = this.db.prepare(`
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const rows = await this.queryAll(`
         SELECT DISTINCT substr(timestamp, 1, 10) as read_date
         FROM reading_events
         ORDER BY read_date DESC
-      `).all();
+      `);
       readDates = new Set(rows.map(r => r.read_date));
     } else {
       readDates = new Set(this.memStore.events.map(e => e.timestamp.slice(0, 10)));
@@ -1005,43 +1263,59 @@ export class TrackerDatabase {
     return streak;
   }
 
-  _calculateWeeklyActivity() {
+  async _calculateWeeklyActivity() {
     const daysSpanish = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const fullDaysSpanish = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
     const result = [];
     const now = new Date();
 
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
-      const dayIndex = d.getDay();
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const minDate = new Date(now);
+      minDate.setDate(minDate.getDate() - 6);
+      const minDateStr = minDate.toISOString().slice(0, 10);
 
-      let count = 0;
-      if (this.isSqlite) {
-        const countRow = this.db.prepare(`
-          SELECT COUNT(*) as c
-          FROM reading_events
-          WHERE substr(timestamp, 1, 10) = ?
-        `).get(dateStr);
-        count = countRow ? countRow.c : 0;
-      } else {
-        count = this.memStore.events.filter(e => e.timestamp.startsWith(dateStr)).length;
+      const countRows = await this.queryAll(`
+        SELECT substr(timestamp, 1, 10) as d, COUNT(*) as c
+        FROM reading_events
+        WHERE substr(timestamp, 1, 10) >= ?
+        GROUP BY d
+      `, [minDateStr]);
+      const countsMap = new Map(countRows.map(r => [r.d, Number(r.c)]));
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().slice(0, 10);
+        const dayIndex = d.getDay();
+
+        result.push({
+          day: fullDaysSpanish[dayIndex],
+          shortDay: daysSpanish[dayIndex],
+          chapters: countsMap.get(dateStr) || 0,
+          date: dateStr,
+        });
       }
-
-      result.push({
-        day: fullDaysSpanish[dayIndex],
-        shortDay: daysSpanish[dayIndex],
-        chapters: count,
-        date: dateStr,
-      });
+    } else {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().slice(0, 10);
+        const dayIndex = d.getDay();
+        const count = this.memStore.events.filter(e => e.timestamp.startsWith(dateStr)).length;
+        result.push({
+          day: fullDaysSpanish[dayIndex],
+          shortDay: daysSpanish[dayIndex],
+          chapters: count,
+          date: dateStr,
+        });
+      }
     }
 
     return result;
   }
 
-  _calculateMonthlyActivity() {
+  async _calculateMonthlyActivity() {
     const monthNames = [
       'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
@@ -1051,42 +1325,59 @@ export class TrackerDatabase {
     const result = [];
     const now = new Date();
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const yyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const monthIdx = d.getMonth();
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const minMonth = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const minMonthStr = `${minMonth.getFullYear()}-${String(minMonth.getMonth() + 1).padStart(2, '0')}`;
 
-      let count = 0;
-      if (this.isSqlite) {
-        const countRow = this.db.prepare(`
-          SELECT COUNT(*) as c
-          FROM reading_events
-          WHERE substr(timestamp, 1, 7) = ?
-        `).get(yyyyMm);
-        count = countRow ? countRow.c : 0;
-      } else {
-        count = this.memStore.events.filter(e => e.timestamp.startsWith(yyyyMm)).length;
+      const countRows = await this.queryAll(`
+        SELECT substr(timestamp, 1, 7) as m, COUNT(*) as c
+        FROM reading_events
+        WHERE substr(timestamp, 1, 7) >= ?
+        GROUP BY m
+      `, [minMonthStr]);
+      const countsMap = new Map(countRows.map(r => [r.m, Number(r.c)]));
+
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const yyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthIdx = d.getMonth();
+
+        result.push({
+          month: monthNames[monthIdx],
+          shortMonth: shortMonthNames[monthIdx],
+          chapters: countsMap.get(yyyyMm) || 0,
+        });
       }
-
-      result.push({
-        month: monthNames[monthIdx],
-        shortMonth: shortMonthNames[monthIdx],
-        chapters: count,
-      });
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const yyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthIdx = d.getMonth();
+        const count = this.memStore.events.filter(e => e.timestamp.startsWith(yyyyMm)).length;
+        result.push({
+          month: monthNames[monthIdx],
+          shortMonth: shortMonthNames[monthIdx],
+          chapters: count,
+        });
+      }
     }
 
     return result;
   }
 
-  _calculateGenreDistribution() {
+  async _calculateGenreDistribution() {
     const palette = ['#A8D5BA', '#F6A596', '#C8B6E2', '#F8C866', '#A2C2E8', '#D8B4E2'];
     const genreCounts = {};
 
-    const genreLists = this.isSqlite
-      ? this.db.prepare('SELECT genres FROM mangas').all().map(m => {
-          try { return JSON.parse(m.genres || '[]'); } catch (e) { return []; }
-        })
-      : Object.values(this.memStore.mangas).map(m => m.genres || []);
+    let genreLists = [];
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const rows = await this.queryAll('SELECT genres FROM mangas');
+      genreLists = rows.map(m => {
+        try { return JSON.parse(m.genres || '[]'); } catch (e) { return []; }
+      });
+    } else {
+      genreLists = Object.values(this.memStore.mangas).map(m => m.genres || []);
+    }
 
     for (const list of genreLists) {
       if (Array.isArray(list)) {
@@ -1113,25 +1404,25 @@ export class TrackerDatabase {
     }));
   }
 
-  _calculateMostActiveDay() {
+  async _calculateMostActiveDay() {
     const daysSpanish = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    if (this.isSqlite) {
-      const rows = this.db.prepare(`
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const rows = await this.queryAll(`
         SELECT strftime('%w', timestamp) as day_of_week, COUNT(*) as c
         FROM reading_events
         GROUP BY day_of_week
         ORDER BY c DESC
         LIMIT 1
-      `).all();
+      `);
 
-      if (rows.length === 0 || rows[0].c === 0) {
+      if (rows.length === 0 || Number(rows[0].c) === 0) {
         return { mostActiveDay: 'Sin actividad aún', mostActiveDayAvg: 0 };
       }
 
       const dayIndex = parseInt(rows[0].day_of_week, 10);
       return {
         mostActiveDay: daysSpanish[dayIndex] || 'Domingo',
-        mostActiveDayAvg: rows[0].c,
+        mostActiveDayAvg: Number(rows[0].c),
       };
     } else {
       const counts = [0, 0, 0, 0, 0, 0, 0];
@@ -1152,13 +1443,13 @@ export class TrackerDatabase {
     }
   }
 
-  _calculateFavoriteReadingTime() {
-    if (this.isSqlite) {
-      const rows = this.db.prepare(`
+  async _calculateFavoriteReadingTime() {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const rows = await this.queryAll(`
         SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hr, COUNT(*) as c
         FROM reading_events
         GROUP BY hr
-      `).all();
+      `);
 
       if (rows.length === 0) return 'Sin datos aún';
 
@@ -1168,8 +1459,8 @@ export class TrackerDatabase {
       let night = 0;
 
       for (const r of rows) {
-        const hr = r.hr;
-        const count = r.c;
+        const hr = Number(r.hr);
+        const count = Number(r.c);
         if (hr >= 6 && hr < 12) morning += count;
         else if (hr >= 12 && hr < 18) afternoon += count;
         else if (hr >= 18 && hr < 24) evening += count;
@@ -1203,35 +1494,33 @@ export class TrackerDatabase {
 
   // --- SETTINGS / META ---
 
-  setMeta(key, value) {
-    if (this.isSqlite) {
-      const stmt = this.db.prepare(`
+  async setMeta(key, value) {
+    const strVal = typeof value === 'string' ? value : JSON.stringify(value);
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      await this.queryRun(`
         INSERT INTO sync_meta (key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `);
-      stmt.run(key, typeof value === 'string' ? value : JSON.stringify(value));
+      `, [key, strVal]);
     } else {
-      this.memStore.meta[key] = value;
+      this.memStore.meta[key] = strVal;
       this.saveFallback();
     }
   }
 
-  getMeta(key) {
-    if (this.isSqlite) {
-      const row = this.db.prepare('SELECT value FROM sync_meta WHERE key = ?').get(key);
+  async getMeta(key) {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      const row = await this.queryGet('SELECT value FROM sync_meta WHERE key = ?', [key]);
       return row ? row.value : null;
     } else {
       return this.memStore.meta[key] || null;
     }
   }
 
-  clearAll() {
-    if (this.isSqlite) {
-      this.db.exec(`
-        DELETE FROM reading_events;
-        DELETE FROM mangas;
-        DELETE FROM sync_meta;
-      `);
+  async clearAll() {
+    if (this.mode === 'sqlite' || this.mode === 'turso') {
+      await this.queryRun('DELETE FROM reading_events');
+      await this.queryRun('DELETE FROM mangas');
+      await this.queryRun('DELETE FROM sync_meta');
     } else {
       this.memStore = { mangas: {}, events: [], meta: {} };
       this.saveFallback();
@@ -1241,15 +1530,22 @@ export class TrackerDatabase {
   // --- FORMATTERS ---
 
   _formatMangaRow(row) {
+    if (!row) return null;
+    let genres = [];
+    try {
+      genres = typeof row.genres === 'string' ? JSON.parse(row.genres || '[]') : (Array.isArray(row.genres) ? row.genres : []);
+    } catch (e) {
+      genres = [];
+    }
     return {
-      id: row.id,
+      id: row.id.toString(),
       title: row.title,
       coverUrl: row.cover_url || '',
-      currentChapter: Number(row.current_chapter),
-      totalChapters: Number(row.total_chapters),
-      status: row.status,
+      currentChapter: Number(row.current_chapter || 0),
+      totalChapters: Number(row.total_chapters || 0),
+      status: row.status || 'reading',
       isFavorite: Boolean(row.is_favorite),
-      genres: JSON.parse(row.genres || '[]'),
+      genres,
       author: row.author || '',
       artist: row.artist || '',
       source: row.source || '',
@@ -1263,20 +1559,28 @@ export class TrackerDatabase {
   }
 
   _formatEventRow(row) {
+    if (!row) return null;
+    let genres = [];
+    try {
+      genres = typeof row.genres === 'string' ? JSON.parse(row.genres || '[]') : (Array.isArray(row.genres) ? row.genres : []);
+    } catch (e) {
+      genres = [];
+    }
     return {
       id: row.id,
-      manga_id: row.manga_id,
+      manga_id: row.manga_id.toString(),
       manga_title: row.manga_title,
-      chapter_number: Number(row.chapter_number),
+      chapter_number: Number(row.chapter_number || 0),
       chapter_id: row.chapter_id || '',
       cover_url: row.cover_url || '',
-      genres: JSON.parse(row.genres || '[]'),
+      genres,
       timestamp: row.timestamp,
       received_at: row.received_at,
-      source: row.source,
+      source: row.source || 'mihon',
       event_hash: row.event_hash,
     };
   }
 }
 
 export const db = new TrackerDatabase();
+await db.init();
