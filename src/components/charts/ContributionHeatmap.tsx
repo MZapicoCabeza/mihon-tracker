@@ -270,6 +270,10 @@ export const ContributionHeatmap: React.FC<ContributionHeatmapProps> = ({
                           alt={heroManga.title}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                           loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
                         />
                       ) : (
                         <div className="absolute inset-0 bg-gradient-to-tr from-[#7C3AED] via-[#C084FC] to-[#EC4899]" />
@@ -458,6 +462,10 @@ export const ContributionHeatmap: React.FC<ContributionHeatmapProps> = ({
                           alt={manga.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-lg">📖</div>
