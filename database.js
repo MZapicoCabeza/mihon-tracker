@@ -236,6 +236,10 @@ export class TrackerDatabase {
     try {
       await this.queryRun("ALTER TABLE mangas ADD COLUMN reading_months INTEGER DEFAULT 0");
     } catch (e) {}
+    try {
+      // Purge any interval of 10 minutes or more so calculations only use intervals < 10m
+      await this.queryRun("DELETE FROM reading_intervals WHERE duration_seconds >= 600");
+    } catch (e) {}
   }
 
   async seedIfNeeded() {
@@ -310,8 +314,8 @@ export class TrackerDatabase {
         if (isNaN(prevTime) || isNaN(currTime)) continue;
 
         const diffSec = Math.round((currTime - prevTime) / 1000);
-        // Realistic continuous reading session interval: between 30s and 45min (2700s)
-        if (diffSec >= 30 && diffSec <= 2700) {
+        // Realistic continuous reading session interval: inferior to 10 minutes (< 600s)
+        if (diffSec >= 30 && diffSec < 600) {
           const id = `inv_${curr.id || i}`;
           statements.push({
             sql: `
@@ -334,7 +338,9 @@ export class TrackerDatabase {
       }
 
       await this.queryBatch(statements);
-      console.log(`✅ [DB INTERVALS] Successfully recorded ${statements.length} real reading intervals into database.`);
+      // Clean up any interval >= 10 minutes to guarantee only intervals < 10m are considered
+      await this.queryRun('DELETE FROM reading_intervals WHERE duration_seconds >= 600');
+      console.log(`✅ [DB INTERVALS] Successfully recorded ${statements.length} real reading intervals (< 10 min) into database.`);
     } catch (err) {
       console.warn(`⚠️ [DB INTERVALS] Notice during intervals calculation: ${err.message}`);
     }
@@ -345,18 +351,19 @@ export class TrackerDatabase {
       const globalRow = await this.queryGet(`
         SELECT COUNT(*) as count, AVG(duration_seconds) as avg_sec
         FROM reading_intervals
+        WHERE duration_seconds < 600
       `);
 
       const count = globalRow ? Number(globalRow.count) : 0;
-      let avgSec = globalRow && globalRow.avg_sec ? Number(globalRow.avg_sec) : 265;
-      if (avgSec <= 0) avgSec = 265;
+      let avgSec = globalRow && globalRow.avg_sec ? Number(globalRow.avg_sec) : 228;
+      if (avgSec <= 0) avgSec = 228;
 
       let mangaAvgSec = avgSec;
       if (mangaId) {
         const mRow = await this.queryGet(`
           SELECT COUNT(*) as count, AVG(duration_seconds) as avg_sec
           FROM reading_intervals
-          WHERE manga_id = ?
+          WHERE manga_id = ? AND duration_seconds < 600
         `, [mangaId.toString()]);
         if (mRow && Number(mRow.count) >= 2 && Number(mRow.avg_sec) > 0) {
           mangaAvgSec = Number(mRow.avg_sec);
@@ -378,11 +385,11 @@ export class TrackerDatabase {
       };
     } else {
       return {
-        averageSeconds: 265,
-        averageMinutes: 4.4,
-        mangaAverageMinutes: 4.4,
-        formattedPace: '4m 25s',
-        totalSamples: 5983,
+        averageSeconds: 228,
+        averageMinutes: 3.8,
+        mangaAverageMinutes: 3.8,
+        formattedPace: '3m 48s',
+        totalSamples: 5743,
       };
     }
   }
@@ -977,7 +984,8 @@ export class TrackerDatabase {
           const currTime = new Date(timestamp).getTime();
           const diffSec = Math.round((currTime - prevTime) / 1000);
 
-          if (diffSec >= 30 && diffSec <= 2700) {
+          // Only record realistic continuous reading sessions strictly under 10 minutes (< 600s)
+          if (diffSec >= 30 && diffSec < 600) {
             await this.queryRun(`
               INSERT OR IGNORE INTO reading_intervals (
                 id, manga_id, manga_title, chapter_number, duration_seconds, started_at, ended_at, source

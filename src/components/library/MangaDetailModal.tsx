@@ -50,7 +50,7 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
     : 'No registrado';
 
   const remainingChapters = Math.max(0, manga.totalChapters - manga.currentChapter);
-  const estimatedMinutes = Math.round(remainingChapters * 4.4);
+  const estimatedMinutes = Math.round(remainingChapters * 3.8);
   const formatEstimatedTime = (mins: number) => {
     if (mins <= 0) return 'Al día';
     const h = Math.floor(mins / 60);
@@ -308,7 +308,7 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
               </div>
             </div>
             <span className="text-[9px] font-black text-[#059669] bg-white px-2.5 py-1 rounded-full border border-[#D1FAE5] shadow-2xs whitespace-nowrap">
-              a 4.4 min/cap
+              a 3.8 min/cap (&lt;10 min)
             </span>
           </div>
         ) : (

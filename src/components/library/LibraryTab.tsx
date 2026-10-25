@@ -317,9 +317,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                 <span className="font-semibold text-[#6B7280]">Progreso:</span>
                 {manga.totalChapters > manga.currentChapter && (
                   <span className="text-[9px] font-black text-[#047857] bg-[#ECFDF5] px-1.5 py-0.5 rounded-md border border-[#A7F3D0] truncate">
-                    ⏱️ ~{Math.round((manga.totalChapters - manga.currentChapter) * 4.4 / 60) > 0 
-                      ? `${Math.round((manga.totalChapters - manga.currentChapter) * 4.4 / 60)}h` 
-                      : `${Math.round((manga.totalChapters - manga.currentChapter) * 4.4)}m`}
+                    ⏱️ ~{Math.round((manga.totalChapters - manga.currentChapter) * 3.8 / 60) > 0 
+                      ? `${Math.round((manga.totalChapters - manga.currentChapter) * 3.8 / 60)}h` 
+                      : `${Math.round((manga.totalChapters - manga.currentChapter) * 3.8)}m`}
                   </span>
                 )}
               </div>

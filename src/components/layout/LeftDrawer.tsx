@@ -51,7 +51,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
 
   const totalMangas = mangas.filter((m) => m.status !== 'deleted').length;
   const deletedCount = mangas.filter((m) => m.status === 'deleted').length;
-  const readingPaceStr = stats.readingPace?.formattedPace || '4m 24s';
+  const readingPaceStr = stats.readingPace?.formattedPace || '3m 48s';
 
   const handleTabClick = (tab: TabType) => {
     onSelectTab(tab);
@@ -315,7 +315,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-[#6B7280] bg-[#F7F5FC] px-2.5 py-1.5 rounded-xl">
             <Clock className="w-3 h-3 text-[#7C3AED]" />
-            <span>Ritmo calculado: ~{readingPaceStr} por capítulo</span>
+            <span>Ritmo (&lt;10 min): ~{readingPaceStr} por capítulo</span>
           </div>
         </div>
 

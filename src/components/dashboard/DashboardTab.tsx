@@ -179,15 +179,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#047857]">
-                  Ritmo Real de Lectura
+                  Ritmo Real (&lt;10 min)
                 </span>
                 <span className="text-[9px] font-bold text-[#059669] bg-white px-2 py-0.2 rounded-full border border-[#D1FAE5]">
-                  {stats.readingPace?.totalSamples || 5986} muestras
+                  {stats.readingPace?.totalSamples || 5743} muestras
                 </span>
               </div>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className="text-base font-black text-[#065F46]">
-                  {stats.readingPace?.formattedPace || '4m 24s'} <span className="text-xs font-bold text-[#047857]">/ capítulo</span>
+                  {stats.readingPace?.formattedPace || '3m 48s'} <span className="text-xs font-bold text-[#047857]">/ capítulo</span>
                 </span>
               </div>
             </div>

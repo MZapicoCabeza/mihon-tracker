@@ -68,7 +68,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const getMetricDisplay = (chapters: number) => {
     switch (metricUnit) {
       case 'hours':
-        return `${Math.round((chapters * (stats.readingPace?.averageMinutes || 4.4)) / 60)}h`;
+        return `${Math.round((chapters * (stats.readingPace?.averageMinutes || 3.8)) / 60)}h`;
       case 'days':
         return `${Math.max(1, Math.round(chapters / 10))}d`;
       case 'series':
