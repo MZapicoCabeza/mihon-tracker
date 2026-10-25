@@ -110,7 +110,7 @@ export async function handleRequest(req, res) {
     sendJson(res, 200, {
       status: 'ok',
       service: 'Mihon Reading Tracker Backend',
-      version: '2.0.0',
+      version: '2.1.0',
       uptime: Math.round(process.uptime()),
       db: db.mode || 'sqlite',
       authRequired: Boolean(API_KEY),
@@ -499,6 +499,14 @@ export async function handleRequest(req, res) {
 
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  if (ext === '.html') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else if (filePath.includes('/assets/') || filePath.includes('\\assets\\')) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  }
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
