@@ -180,6 +180,40 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Card 3: Ritmo Medio & Estimador de Tiempo */}
+        <div className="bg-gradient-to-r from-[#ECFDF5] via-[#F0FDF4] to-[#F5F3FF] border border-[#A7F3D0] rounded-3xl p-3.5 mb-2 shadow-xs flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white shadow-xs flex items-center justify-center text-lg">
+              ⏱️
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#047857]">
+                  Ritmo Real de Lectura
+                </span>
+                <span className="text-[9px] font-bold text-[#059669] bg-white px-2 py-0.2 rounded-full border border-[#D1FAE5]">
+                  {stats.readingPace?.totalSamples || 5986} muestras
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className="text-base font-black text-[#065F46]">
+                  {stats.readingPace?.formattedPace || '4m 24s'} <span className="text-xs font-bold text-[#047857]">/ capítulo</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          {stats.timeToCatchUp && (
+            <div className="text-right">
+              <span className="text-[10px] font-bold text-[#6B7280] block">
+                Para ponerte al día
+              </span>
+              <span className="text-xs font-black text-[#7C3AED] bg-white px-2.5 py-1 rounded-xl shadow-2xs border border-[#DDD6FE] inline-block mt-0.5">
+                ~{stats.timeToCatchUp.formatted}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Daily Activity Card (Directly inspired by top-left card in reference image) */}

@@ -12,6 +12,9 @@ export interface MangaItem {
   lastReadAt: string;
   startedAt?: string;
   readingMonths?: number;
+  chaptersRemaining?: number;
+  estimatedMinutesRemaining?: number;
+  formattedTimeRemaining?: string;
   daysSinceLastRead?: number;
   readingRecency?: 'recent' | 'long_time';
   publicationStatus?: 'completed' | 'ongoing';
@@ -56,6 +59,18 @@ export interface ReadingStats {
   weeklyActivity: { day: string; shortDay: string; chapters: number; date: string }[];
   monthlyActivity: { month: string; shortMonth: string; chapters: number }[];
   genreDistribution: { genre: string; count: number; percentage: number; color: string }[];
+  readingPace?: {
+    averageSeconds: number;
+    averageMinutes: number;
+    mangaAverageMinutes?: number;
+    formattedPace: string;
+    totalSamples: number;
+  };
+  timeToCatchUp?: {
+    pendingChapters: number;
+    estimatedMinutes: number;
+    formatted: string;
+  };
   weeklyComparison?: {
     thisWeek: number;
     prevWeek: number;

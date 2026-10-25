@@ -305,8 +305,17 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           {/* Progress Section */}
           <div className="mt-2 space-y-1">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="font-semibold text-[#6B7280]">Progreso:</span>
-              <span className="font-black text-[#1E1238]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-semibold text-[#6B7280]">Progreso:</span>
+                {manga.totalChapters > manga.currentChapter && (
+                  <span className="text-[9px] font-black text-[#047857] bg-[#ECFDF5] px-1.5 py-0.5 rounded-md border border-[#A7F3D0] truncate">
+                    ⏱️ ~{Math.round((manga.totalChapters - manga.currentChapter) * 4.4 / 60) > 0 
+                      ? `${Math.round((manga.totalChapters - manga.currentChapter) * 4.4 / 60)}h` 
+                      : `${Math.round((manga.totalChapters - manga.currentChapter) * 4.4)}m`}
+                  </span>
+                )}
+              </div>
+              <span className="font-black text-[#1E1238] flex-shrink-0">
                 {manga.currentChapter} / {manga.totalChapters} caps
               </span>
             </div>

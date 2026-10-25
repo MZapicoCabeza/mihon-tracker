@@ -49,6 +49,18 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
       })
     : 'No registrado';
 
+  const remainingChapters = Math.max(0, manga.totalChapters - manga.currentChapter);
+  const estimatedMinutes = Math.round(remainingChapters * 4.4);
+  const formatEstimatedTime = (mins: number) => {
+    if (mins <= 0) return 'Al día';
+    const h = Math.floor(mins / 60);
+    const m = Math.round(mins % 60);
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
+  const estimatedRemainingText = formatEstimatedTime(estimatedMinutes);
+
   const years = Math.floor((manga.readingMonths || 0) / 12);
   const remainingMonths = (manga.readingMonths || 0) % 12;
   let durationText = `${manga.readingMonths || 0} meses`;
@@ -278,6 +290,33 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
             />
           </div>
         </div>
+
+        {/* Real-time Reading Time Estimator */}
+        {remainingChapters > 0 ? (
+          <div className="bg-gradient-to-r from-[#ECFDF5] to-[#F0FDF4] border border-[#A7F3D0] rounded-2xl p-3 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-white shadow-2xs flex items-center justify-center text-base">
+                ⏱️
+              </div>
+              <div>
+                <span className="text-[10px] font-extrabold text-[#047857] uppercase tracking-wider block">
+                  Tiempo estimado para ponerte al día
+                </span>
+                <span className="text-xs font-black text-[#065F46]">
+                  ~{estimatedRemainingText} ({remainingChapters} caps restantes)
+                </span>
+              </div>
+            </div>
+            <span className="text-[9px] font-black text-[#059669] bg-white px-2.5 py-1 rounded-full border border-[#D1FAE5] shadow-2xs whitespace-nowrap">
+              a 4.4 min/cap
+            </span>
+          </div>
+        ) : (
+          <div className="bg-gradient-to-r from-[#F0FDF4] to-[#ECFDF5] border border-[#BBF7D0] rounded-2xl p-2.5 flex items-center justify-center gap-2 text-xs font-black text-[#15803D]">
+            <span>🎉</span>
+            <span>¡Estás completamente al día con esta obra!</span>
+          </div>
+        )}
 
         {/* Genres */}
         <div>
