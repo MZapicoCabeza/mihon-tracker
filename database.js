@@ -261,16 +261,17 @@ export class TrackerDatabase {
         if (Array.isArray(data.events) && data.events.length > 0) {
           const statements = [];
           for (const ev of data.events) {
-            const mangaId = (ev.manga_id || ev.mangaId || '').toString();
+            const mangaId = (ev.manga_id ?? ev.mangaId ?? '').toString();
+            const mangaTitle = (ev.manga_title ?? ev.mangaTitle ?? 'Desconocido').toString();
             const chapterNum = Number(ev.chapter_number ?? ev.chapterNumber ?? 0);
-            const timestamp = ev.timestamp || ev.received_at || new Date().toISOString();
-            const eventHash = ev.event_hash || ev.eventHash || this.generateEventHash(mangaId, chapterNum, timestamp);
-            const id = ev.id || `evt_${mangaId}_${chapterNum}_${Date.now()}`;
+            const timestamp = (ev.timestamp ?? ev.received_at ?? new Date().toISOString()).toString();
+            const eventHash = (ev.event_hash ?? ev.eventHash ?? this.generateEventHash(mangaId, chapterNum, timestamp)).toString();
+            const id = (ev.id ?? `evt_${mangaId}_${chapterNum}_${Date.now()}`).toString();
             const genres = typeof ev.genres === 'string' ? ev.genres : JSON.stringify(Array.isArray(ev.genres) ? ev.genres : []);
-            const coverUrl = ev.cover_url || ev.coverUrl || '';
-            const chapterId = (ev.chapter_id || ev.chapterId || '').toString();
-            const source = ev.source || 'seed-import';
-            const receivedAt = ev.received_at || ev.receivedAt || timestamp;
+            const coverUrl = (ev.cover_url ?? ev.coverUrl ?? '').toString();
+            const chapterId = (ev.chapter_id ?? ev.chapterId ?? '').toString();
+            const source = (ev.source ?? 'seed-import').toString();
+            const receivedAt = (ev.received_at ?? ev.receivedAt ?? timestamp).toString();
 
             statements.push({
               sql: `
@@ -279,7 +280,7 @@ export class TrackerDatabase {
                   cover_url, genres, timestamp, received_at, source, event_hash
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               `,
-              args: [id, mangaId, ev.manga_title || ev.mangaTitle, chapterNum, chapterId, coverUrl, genres, timestamp, receivedAt, source, eventHash],
+              args: [id, mangaId, mangaTitle, chapterNum, chapterId, coverUrl, genres, timestamp, receivedAt, source, eventHash],
             });
           }
           await this.queryBatch(statements);
@@ -650,22 +651,22 @@ export class TrackerDatabase {
         const id = manga.id.toString();
         const existing = existingMap.get(id);
 
-        const title = manga.title || (existing ? existing.title : 'Desconocido');
-        const coverUrl = manga.coverUrl || manga.cover_url || (existing ? existing.cover_url : '');
-        const currentChapter = Number(manga.currentChapter ?? manga.current_chapter ?? (existing ? existing.current_chapter : 0));
-        const totalChapters = Number(manga.totalChapters ?? manga.total_chapters ?? (existing ? existing.total_chapters : 0));
-        const author = manga.author || (existing ? existing.author : '');
-        const artist = manga.artist || (existing ? existing.artist : '');
-        const source = (manga.source !== undefined && manga.source !== null) ? manga.source.toString() : (existing ? existing.source : '');
-        const rating = Number(manga.rating ?? (existing ? existing.rating : 0));
-        const lastReadAt = manga.lastReadAt || manga.last_read_at || (existing ? existing.last_read_at : '');
+        const title = (manga.title || (existing ? existing.title : 'Desconocido') || 'Desconocido').toString();
+        const coverUrl = (manga.coverUrl ?? manga.cover_url ?? (existing ? existing.cover_url : '') ?? '').toString();
+        const currentChapter = Number(manga.currentChapter ?? manga.current_chapter ?? (existing ? existing.current_chapter : 0) ?? 0);
+        const totalChapters = Number(manga.totalChapters ?? manga.total_chapters ?? (existing ? existing.total_chapters : 0) ?? 0);
+        const author = (manga.author ?? (existing ? existing.author : '') ?? '').toString();
+        const artist = (manga.artist ?? (existing ? existing.artist : '') ?? '').toString();
+        const source = (manga.source !== undefined && manga.source !== null) ? manga.source.toString() : (existing ? (existing.source ?? '') : '').toString();
+        const rating = Number(manga.rating ?? (existing ? existing.rating : 0) ?? 0);
+        const lastReadAt = (manga.lastReadAt ?? manga.last_read_at ?? (existing ? existing.last_read_at : '') ?? '').toString();
 
         let genres = manga.genres;
         if (!Array.isArray(genres)) {
           if (typeof genres === 'string') {
             try { genres = JSON.parse(genres); } catch (e) { genres = []; }
           } else {
-            genres = existing ? (typeof existing.genres === 'string' ? JSON.parse(existing.genres || '[]') : existing.genres) : [];
+            genres = existing ? (typeof existing.genres === 'string' ? JSON.parse(existing.genres || '[]') : (existing.genres || [])) : [];
           }
         }
 
@@ -673,8 +674,8 @@ export class TrackerDatabase {
           ? Boolean(manga.isFavorite || manga.is_favorite)
           : (existing ? Boolean(existing.is_favorite) : false);
 
-        let startedAt = manga.startedAt || manga.started_at || (existing ? existing.started_at : '') || lastReadAt;
-        let readingMonths = Number(manga.readingMonths ?? manga.reading_months ?? (existing ? existing.reading_months : 0));
+        let startedAt = (manga.startedAt ?? manga.started_at ?? (existing ? existing.started_at : '') ?? lastReadAt ?? '').toString();
+        let readingMonths = Number(manga.readingMonths ?? manga.reading_months ?? (existing ? existing.reading_months : 0) ?? 0);
 
         if (!readingMonths && startedAt) {
           const s = new Date(startedAt);
@@ -1217,7 +1218,8 @@ export class TrackerDatabase {
         retakenSeries,
         libraryStatuses,
         chapterTotals,
-        mangasCountRow
+        mangasCountRow,
+        dailyCalendarRows
       ] = await Promise.all([
         this.queryGet('SELECT COUNT(DISTINCT substr(timestamp, 1, 10)) as c FROM reading_events'),
         this.queryGet('SELECT MIN(timestamp) as m FROM reading_events'),
@@ -1261,7 +1263,22 @@ export class TrackerDatabase {
         `),
         this.queryAll(`SELECT status, COUNT(*) as count FROM mangas GROUP BY status`),
         this.queryGet(`SELECT SUM(current_chapter) as readChapters, SUM(total_chapters) as totalChapters FROM mangas`),
-        this.queryGet('SELECT COUNT(*) as c FROM mangas')
+        this.queryGet('SELECT COUNT(*) as c FROM mangas'),
+        this.queryAll(`
+          SELECT substr(e.timestamp, 1, 10) as read_date,
+                 e.manga_id,
+                 e.manga_title,
+                 COALESCE(m.cover_url, e.cover_url) as cover_url,
+                 MIN(e.chapter_number) as min_chapter,
+                 MAX(e.chapter_number) as max_chapter,
+                 COUNT(e.id) as chapters_read,
+                 MAX(e.timestamp) as last_read_time
+          FROM reading_events e
+          LEFT JOIN mangas m ON e.manga_id = m.id
+          WHERE date(e.timestamp) >= date('now', '-365 days')
+          GROUP BY read_date, e.manga_id, e.manga_title
+          ORDER BY read_date DESC, chapters_read DESC
+        `)
       ]);
 
       const distinctDays = distinctDaysRow ? Number(distinctDaysRow.c) : 0;
@@ -1288,6 +1305,33 @@ export class TrackerDatabase {
       // Heatmap 365 days
       const heatmapData = {};
       heatmapRows.forEach(r => { heatmapData[r.date] = Number(r.count); });
+
+      // Daily Manga Calendar with hero covers & all read mangas
+      const dailyMangaCalendar = {};
+      (dailyCalendarRows || []).forEach(r => {
+        const date = r.read_date;
+        if (!dailyMangaCalendar[date]) {
+          dailyMangaCalendar[date] = {
+            totalChapters: 0,
+            heroManga: null,
+            mangas: [],
+          };
+        }
+        const item = {
+          id: (r.manga_id || '').toString(),
+          title: r.manga_title || 'Desconocido',
+          coverUrl: r.cover_url || '',
+          chaptersRead: Number(r.chapters_read || 0),
+          minChapter: Number(r.min_chapter || 0),
+          maxChapter: Number(r.max_chapter || 0),
+          lastReadTime: r.last_read_time || '',
+        };
+        dailyMangaCalendar[date].totalChapters += item.chaptersRead;
+        dailyMangaCalendar[date].mangas.push(item);
+        if (!dailyMangaCalendar[date].heroManga) {
+          dailyMangaCalendar[date].heroManga = item;
+        }
+      });
 
       // Weekly comparison
       const thisWeekCount = thisWeekRow ? Number(thisWeekRow.c) : 0;
@@ -1359,6 +1403,7 @@ export class TrackerDatabase {
         },
         timelineByYear: timelineByYear.map(y => ({ year: y.year, chapters: Number(y.chapters), series: Number(y.series) })),
         heatmapData,
+        dailyMangaCalendar,
         weeklyComparison,
         monthlyComparison,
         habits: {
@@ -1394,6 +1439,7 @@ export class TrackerDatabase {
           { year: '2026', chapters: 2800, series: 182 },
         ],
         heatmapData: {},
+        dailyMangaCalendar: {},
         weeklyComparison: { thisWeek: 88, prevWeek: 64, percentDiff: 38, dailyAverage: '12.6' },
         monthlyComparison: { thisMonth: 179, prevMonth: 112, percentDiff: 60, dailyAverage: '6.0' },
         habits: { totalSessions: 600, avgChaptersPerSession: '9.8', marathons: [], retakenSeries: [] },

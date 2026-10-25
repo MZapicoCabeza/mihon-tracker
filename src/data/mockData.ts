@@ -32,6 +32,8 @@ export const EMPTY_STATS: ReadingStats = {
     { month: 'Octubre', shortMonth: 'Oct', chapters: 0 },
   ],
   genreDistribution: [],
+  heatmapData: {},
+  dailyMangaCalendar: {},
   lastSyncAt: null,
 };
 

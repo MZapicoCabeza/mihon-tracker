@@ -208,10 +208,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </div>
           </div>
 
-          {/* GitHub-style Contribution Heatmap */}
+          {/* GitHub-style Contribution Heatmap with Covers & Stack */}
           <ContributionHeatmap
             heatmapData={stats.heatmapData}
+            dailyMangaCalendar={stats.dailyMangaCalendar}
             monthlyComparison={stats.monthlyComparison}
+            onSelectManga={(mangaId) => {
+              const target = mangas.find((m) => m.id === mangaId);
+              if (target) setSelectedManga(target);
+            }}
           />
 
           {/* Annual Evolution Card */}
@@ -624,10 +629,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* ============================================================ */}
       {activeSection === 'habitos' && (
         <div className="space-y-4 animate-fadeIn">
-          {/* Full Heatmap */}
+          {/* Full Heatmap with Covers & Stack */}
           <ContributionHeatmap
             heatmapData={stats.heatmapData}
+            dailyMangaCalendar={stats.dailyMangaCalendar}
             monthlyComparison={stats.monthlyComparison}
+            onSelectManga={(mangaId) => {
+              const target = mangas.find((m) => m.id === mangaId);
+              if (target) setSelectedManga(target);
+            }}
           />
 
           {/* Reading Schedule & Sessions Card */}

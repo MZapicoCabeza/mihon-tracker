@@ -41,6 +41,22 @@ export interface ReadingHistoryEvent {
   event_hash?: string;
 }
 
+export interface DailyCalendarManga {
+  id: string;
+  title: string;
+  coverUrl: string;
+  chaptersRead: number;
+  minChapter: number;
+  maxChapter: number;
+  lastReadTime?: string;
+}
+
+export interface DailyCalendarDay {
+  totalChapters: number;
+  heroManga: DailyCalendarManga | null;
+  mangas: DailyCalendarManga[];
+}
+
 export interface ReadingStats {
   totalChaptersRead: number;
   estimatedHoursRead: number;
@@ -97,6 +113,7 @@ export interface ReadingStats {
     series: number;
   }[];
   heatmapData?: Record<string, number>;
+  dailyMangaCalendar?: Record<string, DailyCalendarDay>;
   habits?: {
     totalSessions: number;
     avgChaptersPerSession: string;
