@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, RefreshCw, Upload, CheckCircle2, AlertCircle, Server, Key, ShieldCheck, Terminal, FileText } from 'lucide-react';
+import { X, RefreshCw, Upload, CheckCircle2, AlertCircle, Server, Key, ShieldCheck, Terminal, FileText, Download } from 'lucide-react';
 import { apiClient } from '../../utils/apiClient';
 import { parseMihonBackupFile } from '../../utils/backupParser';
 
@@ -66,6 +66,36 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
       showToast(`Error al sincronizar: ${err.message}`);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      showToast('Generando archivo de respaldo...');
+      const lib = await apiClient.getLibrary();
+      const evs = await apiClient.getEvents({ limit: 500 });
+      const sts = await apiClient.getStats();
+
+      const backupObj = {
+        mangas: lib.mangas || [],
+        events: evs.events || [],
+        stats: sts.stats,
+        exportedAt: new Date().toISOString(),
+        version: '1.0'
+      };
+
+      const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mihon_tracker_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('💾 Copia de respaldo descargada');
+    } catch (err: any) {
+      showToast(`Error al exportar: ${err.message}`);
     }
   };
 
@@ -215,6 +245,24 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
                     className="hidden"
                   />
                 </label>
+              </div>
+
+              {/* Export Backup File */}
+              <div className="bg-[#FAF9FE] border border-purple-100 rounded-2xl p-3.5 shadow-2xs">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Download className="w-4 h-4 text-[#059669]" />
+                  <span className="font-black text-[#1E1238]">Descargar Copia de Seguridad</span>
+                </div>
+                <p className="text-[11px] text-[#6B7280] leading-relaxed mb-3">
+                  Guarda un archivo de respaldo (<b>.json</b>) con todos tus manhwas, portadas y capítulos leídos en tu dispositivo.
+                </p>
+                <button
+                  onClick={handleExportBackup}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-[#A7F3D0] font-black text-[#059669] hover:bg-[#ECFDF5] shadow-2xs transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Descargar Copia de Respaldo</span>
+                </button>
               </div>
 
               {/* Instructions on Mobile Sync */}

@@ -23,6 +23,7 @@ interface MangaDetailModalProps {
   onToggleFavorite: (id: string) => void;
   onUpdateStatus: (id: string, status: MangaStatus) => void;
   onDeletePermanently?: (id: string) => void;
+  onUpdateChapter?: (id: string, chapter: number) => void;
 }
 
 export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
@@ -31,6 +32,7 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
   onToggleFavorite,
   onUpdateStatus,
   onDeletePermanently,
+  onUpdateChapter,
 }) => {
   if (!manga) return null;
 
@@ -230,6 +232,38 @@ export const MangaDetailModal: React.FC<MangaDetailModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Quick Chapter Stepper */}
+        {onUpdateChapter && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#FAF5FF] via-[#F3E8FF] to-[#FAF5FF] border border-[#DDD6FE] flex items-center justify-between gap-3 shadow-2xs">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#7C3AED]">
+                Progreso de Lectura
+              </span>
+              <span className="text-sm font-black text-[#1E1238] truncate">
+                Capítulo {manga.currentChapter} de {manga.totalChapters}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => onUpdateChapter(manga.id, Math.max(0, manga.currentChapter - 1))}
+                disabled={manga.currentChapter <= 0}
+                className="w-8 h-8 rounded-xl bg-white border border-purple-200 text-[#6B7280] font-black text-xs flex items-center justify-center hover:bg-purple-50 active:scale-95 disabled:opacity-40 transition-all shadow-2xs"
+                title="Capítulo anterior"
+              >
+                -1
+              </button>
+              <button
+                onClick={() => onUpdateChapter(manga.id, manga.currentChapter + 1)}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] text-white font-black text-xs flex items-center gap-1.5 hover:brightness-105 active:scale-95 transition-all shadow-xs"
+                title="Marcar siguiente capítulo leído"
+              >
+                <span>+1 Cap</span>
+                <span className="text-sm">📖</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Visual Progress Bar */}
         <div className="space-y-1.5">

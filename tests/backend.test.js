@@ -438,5 +438,20 @@ test('Mihon Reading Tracker Backend Test Suite', async (t) => {
     );
     assert.equal(statusRes.status, 200);
     assert.equal(statusRes.body.manga.status, 'paused');
+
+    // Update chapter progress directly
+    const chapRes = await request(
+      testServer,
+      {
+        hostname: 'localhost',
+        port,
+        path: '/api/library/9001/chapter',
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      { chapter: 45 }
+    );
+    assert.equal(chapRes.status, 200);
+    assert.equal(chapRes.body.manga.currentChapter, 45);
   });
 });

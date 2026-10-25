@@ -8,16 +8,17 @@ import { MobileDownloadModal } from './components/mobile/MobileDownloadModal';
 import { EMPTY_STATS } from './data/mockData';
 import { MangaItem, MangaStatus, ReadingHistoryEvent, ReadingStats } from './types/tracker';
 import { apiClient } from './utils/apiClient';
+import { persistentStorage } from './utils/persistentStorage';
 import { CheckCircle2, WifiOff } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
   
-  // Real database-driven states (Empty by default, no mock data)
-  const [mangas, setMangas] = useState<MangaItem[]>([]);
-  const [recentEvents, setRecentEvents] = useState<ReadingHistoryEvent[]>([]);
-  const [stats, setStats] = useState<ReadingStats>(EMPTY_STATS);
-  const [loading, setLoading] = useState<boolean>(true);
+  // Local-First Persistent State: initialized from persistent storage immediately (0ms cold start)
+  const [mangas, setMangas] = useState<MangaItem[]>(() => persistentStorage.loadLibrary() || []);
+  const [recentEvents, setRecentEvents] = useState<ReadingHistoryEvent[]>(() => persistentStorage.loadEvents() || []);
+  const [stats, setStats] = useState<ReadingStats>(() => persistentStorage.loadStats() || EMPTY_STATS);
+  const [loading, setLoading] = useState<boolean>(() => !persistentStorage.loadLibrary());
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
@@ -37,9 +38,13 @@ export const App: React.FC = () => {
     }, 4000);
   };
 
-  // Full fetch of library, events, and stats from the backend
+  // Full fetch of library, events, and stats from the backend with Smart Two-Way Reconciliation
   const refreshAllData = useCallback(async (isInitial = false) => {
-    if (isInitial) setLoading(true);
+    // Only show full loading spinner if we have no local data cached
+    if (isInitial && (!mangas || mangas.length === 0)) {
+      setLoading(true);
+    }
+
     try {
       const [libRes, eventsRes, statsRes] = await Promise.all([
         apiClient.getLibrary(),
@@ -47,15 +52,58 @@ export const App: React.FC = () => {
         apiClient.getStats(),
       ]);
 
-      setMangas(libRes.mangas || []);
-      setRecentEvents(eventsRes.events || []);
+      const serverMangas = libRes.mangas || [];
+      const serverEvents = eventsRes.events || [];
+
+      // Load freshest local state
+      const currentLocalMangas = persistentStorage.loadLibrary() || mangas;
+      const currentLocalEvents = persistentStorage.loadEvents() || recentEvents;
+
+      // Smart Reconciliation: Protect local reads against Render free-tier ephemeral container resets
+      const { merged: reconciledMangas, hasLocalOverrides, overrideCount } =
+        persistentStorage.reconcileLibrary(currentLocalMangas, serverMangas);
+
+      const { merged: reconciledEvents, missingOnServer } =
+        persistentStorage.reconcileEvents(currentLocalEvents, serverEvents);
+
+      // Optimistically apply reconciled state
+      setMangas(reconciledMangas);
+      setRecentEvents(reconciledEvents);
       setStats(statsRes.stats || EMPTY_STATS);
       setLastSyncAt(new Date().toISOString());
 
+      // Persist to device storage immediately
+      persistentStorage.saveLibrary(reconciledMangas);
+      persistentStorage.saveEvents(reconciledEvents);
+      persistentStorage.saveStats(statsRes.stats || EMPTY_STATS);
+
       // Seed processed event IDs
-      if (Array.isArray(eventsRes.events)) {
-        for (const ev of eventsRes.events) {
-          if (ev.id) processedEventIdsRef.current.add(ev.id);
+      for (const ev of reconciledEvents) {
+        if (ev.id) processedEventIdsRef.current.add(ev.id);
+      }
+
+      // If local device had newer progress than server (Render reset overnight), push to restore Render!
+      if (hasLocalOverrides && overrideCount > 0) {
+        console.log(`🔄 [CLOUD RE-SYNC] Re-syncing ${overrideCount} locally advanced mangas to restore Render cloud database`);
+        apiClient.syncLibrary(reconciledMangas).catch((e) =>
+          console.warn('Could not re-sync library to server:', e.message)
+        );
+      }
+
+      // If there were events locally that Render lost overnight, restore them on Render!
+      if (missingOnServer.length > 0) {
+        console.log(`⚡ [CLOUD RE-SYNC] Re-syncing ${missingOnServer.length} local reading events to Render`);
+        for (const ev of missingOnServer) {
+          apiClient.trackChapter({
+            manga_id: ev.manga_id,
+            manga_title: ev.manga_title,
+            chapter_number: ev.chapter_number,
+            chapter_id: ev.chapter_id,
+            cover_url: ev.cover_url,
+            genres: ev.genres,
+            timestamp: ev.timestamp,
+            source: ev.source || 'client-resync',
+          }).catch(() => {});
         }
       }
 
@@ -63,25 +111,26 @@ export const App: React.FC = () => {
     } catch (err: any) {
       console.warn('⚠️ [API ERROR] Could not sync with backend:', err.message);
       setError(err.message || 'No se pudo conectar con el servidor.');
+      // Keep displaying local persistent data even when offline or Render is asleep
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, []);
+  }, [mangas, recentEvents]);
 
   // Initial load on mount
   useEffect(() => {
     refreshAllData(true);
   }, [refreshAllData]);
 
-  // Periodic background refresh every 15s to keep stats and library perfectly in sync
+  // Periodic background refresh every 20s to keep stats and library in sync
   useEffect(() => {
     const timer = setInterval(() => {
       refreshAllData(false);
-    }, 15000);
+    }, 20000);
     return () => clearInterval(timer);
   }, [refreshAllData]);
 
-  // Delta polling every 3 seconds to catch live events dispatched from Mihon
+  // Delta polling every 4 seconds to catch live events dispatched from Mihon
   useEffect(() => {
     const pollEvents = async () => {
       if (isPollingRef.current) return;
@@ -91,7 +140,6 @@ export const App: React.FC = () => {
         const eventsRes = await apiClient.getEvents({ limit: 25 });
         const incomingEvents = eventsRes.events || [];
 
-        // Find all events not yet processed
         const newEvents: ReadingHistoryEvent[] = [];
         for (const ev of incomingEvents) {
           if (ev.id && !processedEventIdsRef.current.has(ev.id)) {
@@ -100,31 +148,32 @@ export const App: React.FC = () => {
           }
         }
 
-        // If new chapters were read in Mihon, update UI and refresh backend stats
         if (newEvents.length > 0) {
           console.log(`⚡ [LIVE SYNC] Received ${newEvents.length} new reading event(s) from Mihon`);
           
           setRecentEvents((prev) => {
             const combined = [...newEvents, ...prev];
             const seen = new Set<string>();
-            return combined.filter(e => {
+            const deduped = combined.filter(e => {
               if (seen.has(e.id)) return false;
               seen.add(e.id);
               return true;
             });
+            persistentStorage.saveEvents(deduped);
+            return deduped;
           });
 
-          // Show friendly notification for the latest read chapter
           const latest = newEvents[0];
           showToast(`📱 Mihon: Leído ${latest.manga_title} Cap. ${latest.chapter_number}`);
 
-          // Refresh full library and stats from server
           const [updatedLib, updatedStats] = await Promise.all([
             apiClient.getLibrary(),
             apiClient.getStats(),
           ]);
           setMangas(updatedLib.mangas || []);
           setStats(updatedStats.stats || EMPTY_STATS);
+          persistentStorage.saveLibrary(updatedLib.mangas || []);
+          persistentStorage.saveStats(updatedStats.stats || EMPTY_STATS);
           setLastSyncAt(new Date().toISOString());
         }
 
@@ -136,19 +185,70 @@ export const App: React.FC = () => {
       }
     };
 
-    const intervalTimer = setInterval(pollEvents, 3000);
+    const intervalTimer = setInterval(pollEvents, 4000);
     return () => clearInterval(intervalTimer);
   }, [error]);
 
-  // Toggle favorite with optimistic update and server persistence
+  // Update chapter progress with local-first instant persistence & cloud sync
+  const handleUpdateChapter = async (id: string, newChapter: number) => {
+    const target = mangas.find((m) => m.id === id);
+    if (!target) return;
+
+    const validatedChapter = Math.max(0, newChapter);
+    const nowIso = new Date().toISOString();
+
+    const updatedMangas = mangas.map((m) =>
+      m.id === id ? { ...m, currentChapter: validatedChapter, lastReadAt: nowIso } : m
+    );
+
+    const newEvent: ReadingHistoryEvent = {
+      id: `evt_${id}_${validatedChapter}_${Date.now()}`,
+      manga_id: id,
+      manga_title: target.title,
+      chapter_number: validatedChapter,
+      cover_url: target.coverUrl,
+      genres: target.genres,
+      timestamp: nowIso,
+      received_at: nowIso,
+      source: 'app-reader',
+    };
+
+    const updatedEvents = [
+      newEvent,
+      ...recentEvents.filter((e) => !(e.manga_id === id && e.chapter_number === validatedChapter)),
+    ];
+
+    // 1. Immediately update React state
+    setMangas(updatedMangas);
+    setRecentEvents(updatedEvents);
+
+    // 2. Immediately save to device persistent storage (Guaranteed zero data loss)
+    persistentStorage.saveLibrary(updatedMangas);
+    persistentStorage.saveEvents(updatedEvents);
+
+    showToast(`📖 ${target.title}: Cap. ${validatedChapter} guardado`);
+
+    // 3. Dispatch to server
+    try {
+      await apiClient.updateChapter(id, validatedChapter);
+      const updatedStats = await apiClient.getStats();
+      setStats(updatedStats.stats);
+      persistentStorage.saveStats(updatedStats.stats);
+    } catch (err: any) {
+      console.warn('Could not sync chapter to server immediately, saved in local device storage:', err.message);
+      persistentStorage.queuePendingEvent(newEvent);
+    }
+  };
+
+  // Toggle favorite with optimistic update and local + server persistence
   const handleToggleFavorite = async (id: string) => {
     const target = mangas.find((m) => m.id === id);
     if (!target) return;
     const nextVal = !target.isFavorite;
 
-    setMangas((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, isFavorite: nextVal } : m))
-    );
+    const updated = mangas.map((m) => (m.id === id ? { ...m, isFavorite: nextVal } : m));
+    setMangas(updated);
+    persistentStorage.saveLibrary(updated);
 
     try {
       await apiClient.updateFavorite(id, nextVal);
@@ -158,16 +258,17 @@ export const App: React.FC = () => {
     }
   };
 
-  // Update status with optimistic update and server persistence
+  // Update status with optimistic update and local + server persistence
   const handleUpdateStatus = async (id: string, status: MangaStatus) => {
-    setMangas((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, status } : m))
-    );
+    const updated = mangas.map((m) => (m.id === id ? { ...m, status } : m));
+    setMangas(updated);
+    persistentStorage.saveLibrary(updated);
 
     try {
       await apiClient.updateStatus(id, status);
       const updatedStats = await apiClient.getStats();
       setStats(updatedStats.stats);
+      persistentStorage.saveStats(updatedStats.stats);
       if (status === 'deleted') {
         showToast('🗑️ Movido a la papelera (ver en pestaña Borrados)');
       } else {
@@ -179,14 +280,18 @@ export const App: React.FC = () => {
     }
   };
 
-  // Permanent delete from database
+  // Permanent delete from database & local storage
   const handleDeletePermanently = async (id: string) => {
-    setMangas((prev) => prev.filter((m) => m.id !== id));
+    const updated = mangas.filter((m) => m.id !== id);
+    setMangas(updated);
+    persistentStorage.saveLibrary(updated);
+
     try {
       await apiClient.deletePermanently(id);
       showToast('🗑️ Manhwa eliminado definitivamente');
       const updatedStats = await apiClient.getStats();
       setStats(updatedStats.stats);
+      persistentStorage.saveStats(updatedStats.stats);
     } catch (err: any) {
       showToast(`Error al eliminar: ${err.message}`);
       refreshAllData(false);
@@ -195,12 +300,16 @@ export const App: React.FC = () => {
 
   // Empty all trash
   const handleEmptyTrash = async () => {
-    setMangas((prev) => prev.filter((m) => m.status !== 'deleted'));
+    const updated = mangas.filter((m) => m.status !== 'deleted');
+    setMangas(updated);
+    persistentStorage.saveLibrary(updated);
+
     try {
       const res = await apiClient.emptyTrash();
       showToast(`🗑️ Papelera vaciada (${res.emptied || 0} eliminados)`);
       const updatedStats = await apiClient.getStats();
       setStats(updatedStats.stats);
+      persistentStorage.saveStats(updatedStats.stats);
     } catch (err: any) {
       showToast(`Error al vaciar papelera: ${err.message}`);
       refreshAllData(false);
@@ -226,26 +335,26 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* Global Connection Error Banner if Backend is offline */}
+        {/* Global Connection Error Banner if Backend is offline (non-blocking) */}
         {error && !loading && (
-          <div className="mb-3 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-[#1E1238] shadow-xs flex items-center justify-between gap-2">
+          <div className="mb-3 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-[#1E1238] shadow-xs flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <WifiOff className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <WifiOff className="w-4 h-4 text-amber-600 flex-shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-black text-rose-700">Sin conexión con el servidor</p>
-                <p className="text-[10px] text-gray-500 truncate">{error}</p>
+                <p className="text-xs font-black text-amber-800">Modo Local Activo (Servidor en reposo)</p>
+                <p className="text-[10px] text-amber-600 truncate">Tus lecturas se guardan seguras en este dispositivo</p>
               </div>
             </div>
             <div className="flex gap-1.5 flex-shrink-0">
               <button
-                onClick={() => refreshAllData(true)}
-                className="py-1 px-2.5 rounded-full bg-white border border-rose-200 text-[10px] font-bold text-rose-700 hover:bg-rose-100 shadow-2xs"
+                onClick={() => refreshAllData(false)}
+                className="py-1 px-2.5 rounded-full bg-white border border-amber-300 text-[10px] font-bold text-amber-800 hover:bg-amber-100 shadow-2xs"
               >
-                Reintentar
+                Reconectar
               </button>
               <button
                 onClick={() => setIsSyncModalOpen(true)}
-                className="py-1 px-2.5 rounded-full bg-rose-600 text-white text-[10px] font-bold shadow-2xs"
+                className="py-1 px-2.5 rounded-full bg-amber-600 text-white text-[10px] font-bold shadow-2xs"
               >
                 Ajustes
               </button>
@@ -279,6 +388,7 @@ export const App: React.FC = () => {
                 onToggleFavorite={handleToggleFavorite}
                 onUpdateStatus={handleUpdateStatus}
                 onDeletePermanently={handleDeletePermanently}
+                onUpdateChapter={handleUpdateChapter}
                 onRefreshData={async () => {
                   await refreshAllData(false);
                   showToast('✨ Sincronizado con la nube');
@@ -293,6 +403,7 @@ export const App: React.FC = () => {
                 onUpdateStatus={handleUpdateStatus}
                 onDeletePermanently={handleDeletePermanently}
                 onEmptyTrash={handleEmptyTrash}
+                onUpdateChapter={handleUpdateChapter}
               />
             )}
 

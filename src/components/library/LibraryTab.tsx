@@ -31,6 +31,7 @@ interface LibraryTabProps {
   onDeletePermanently?: (id: string) => void;
   onEmptyTrash?: () => void;
   selectedMangaId?: string | null;
+  onUpdateChapter?: (id: string, chapter: number) => void;
 }
 
 export type LibraryFilterOption =
@@ -57,6 +58,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   onUpdateStatus,
   onDeletePermanently,
   onEmptyTrash,
+  selectedMangaId,
+  onUpdateChapter,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<LibraryFilterOption>('all');
@@ -696,6 +699,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         onToggleFavorite={onToggleFavorite}
         onUpdateStatus={onUpdateStatus}
         onDeletePermanently={onDeletePermanently}
+        onUpdateChapter={onUpdateChapter}
       />
     </div>
   );

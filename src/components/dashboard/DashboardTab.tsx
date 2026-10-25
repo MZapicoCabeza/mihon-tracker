@@ -31,6 +31,7 @@ interface DashboardTabProps {
   onUpdateStatus?: (id: string, status: MangaStatus) => void;
   onDeletePermanently?: (id: string) => void;
   onRefreshData?: () => Promise<void>;
+  onUpdateChapter?: (id: string, chapter: number) => void;
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
@@ -44,6 +45,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   onUpdateStatus = () => {},
   onDeletePermanently,
   onRefreshData,
+  onUpdateChapter,
 }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState(6); // Default to today
   const [selectedManga, setSelectedManga] = useState<MangaItem | null>(null);
@@ -383,6 +385,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         onToggleFavorite={onToggleFavorite}
         onUpdateStatus={onUpdateStatus}
         onDeletePermanently={onDeletePermanently}
+        onUpdateChapter={onUpdateChapter}
       />
 
       {/* Reader Wrapped Modal */}

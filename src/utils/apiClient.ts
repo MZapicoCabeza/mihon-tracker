@@ -163,6 +163,13 @@ export const apiClient = {
     });
   },
 
+  async updateChapter(mangaId: string, chapter: number): Promise<{ status: string; manga: MangaItem }> {
+    return apiFetch(`/api/library/${encodeURIComponent(mangaId)}/chapter`, {
+      method: 'PUT',
+      body: JSON.stringify({ chapter }),
+    });
+  },
+
   async updateStatus(mangaId: string, status: MangaStatus): Promise<{ status: string; manga: MangaItem }> {
     return apiFetch(`/api/library/${encodeURIComponent(mangaId)}/status`, {
       method: 'PUT',

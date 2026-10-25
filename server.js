@@ -423,6 +423,26 @@ export async function handleRequest(req, res) {
     }
   }
 
+  // 8.05 PUT /api/library/:id/chapter: Update chapter progress directly
+  if (req.method === 'PUT' && pathname.startsWith('/api/library/') && pathname.endsWith('/chapter')) {
+    const parts = pathname.split('/');
+    const id = decodeURIComponent(parts[3]);
+    try {
+      const payload = await parseBody(req);
+      const chapter = Number(payload.chapter ?? payload.currentChapter ?? payload.current_chapter);
+      if (isNaN(chapter) || chapter < 0) {
+        sendError(res, 400, 'Invalid chapter number');
+        return;
+      }
+      const updated = db.updateMangaChapter(id, chapter);
+      sendJson(res, 200, { status: 'ok', manga: updated });
+      return;
+    } catch (err) {
+      sendError(res, 400, err.message);
+      return;
+    }
+  }
+
   // 8.1 POST /api/library/purge-nsfw: Purge all adult and hentai titles
   if (req.method === 'POST' && pathname === '/api/library/purge-nsfw') {
     try {

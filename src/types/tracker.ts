@@ -35,6 +35,7 @@ export interface ReadingHistoryEvent {
   received_at?: string;
   genres: string[];
   source?: string;
+  event_hash?: string;
 }
 
 export interface ReadingStats {

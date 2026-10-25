@@ -441,13 +441,78 @@ export class TrackerDatabase {
     }
 
     this.setMeta('last_library_sync', new Date().toISOString());
+    this.scheduleSaveSeedData();
     return { total: mangasArray.length, inserted, updated };
+  }
+
+  scheduleSaveSeedData() {
+    if (this.dbPath === ':memory:' || process.env.NODE_ENV === 'test') return;
+    if (this._saveSeedTimer) clearTimeout(this._saveSeedTimer);
+    this._saveSeedTimer = setTimeout(() => {
+      try {
+        const allMangas = this.getAllMangas();
+        let allEvents = [];
+        if (this.isSqlite) {
+          allEvents = this.db.prepare('SELECT * FROM reading_events ORDER BY timestamp DESC LIMIT 10000').all().map(r => this._formatEventRow(r));
+        } else {
+          allEvents = this.memStore?.events || [];
+        }
+        const stats = this.calculateStats();
+        const output = {
+          mangas: allMangas,
+          events: allEvents,
+          stats: stats,
+          lastSyncAt: new Date().toISOString()
+        };
+        fs.writeFileSync(SEED_DATA_FILE, JSON.stringify(output, null, 2), 'utf-8');
+      } catch (e) {
+        // Ignore file write errors if restricted
+      }
+    }, 2000);
+  }
+
+  updateMangaChapter(id, newChapter) {
+    const manga = this.getMangaById(id);
+    if (!manga) throw new Error('Manga no encontrado');
+    const ch = Number(newChapter);
+    if (isNaN(ch) || ch < 0) throw new Error('Número de capítulo inválido');
+
+    const now = new Date().toISOString();
+    if (this.isSqlite) {
+      this.db.prepare(`
+        UPDATE mangas SET
+          current_chapter = ?,
+          last_read_at = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).run(ch, now, now, id.toString());
+    } else {
+      manga.currentChapter = ch;
+      manga.lastReadAt = now;
+      manga.updatedAt = now;
+      this.saveFallback();
+    }
+
+    // Record reading event so statistics, streak and history update
+    this.recordReadingEvent({
+      manga_id: id.toString(),
+      manga_title: manga.title,
+      chapter_number: ch,
+      cover_url: manga.coverUrl,
+      genres: manga.genres,
+      timestamp: now,
+      source: 'app-reader',
+    });
+
+    this.scheduleSaveSeedData();
+    return this.getMangaById(id);
   }
 
   updateMangaFavorite(id, isFavorite) {
     if (this.isSqlite) {
       const stmt = this.db.prepare('UPDATE mangas SET is_favorite = ?, updated_at = ? WHERE id = ?');
       stmt.run(isFavorite ? 1 : 0, new Date().toISOString(), id.toString());
+      this.scheduleSaveSeedData();
       return this.getMangaById(id);
     } else {
       const manga = this.getMangaById(id);
@@ -456,6 +521,7 @@ export class TrackerDatabase {
         manga.updatedAt = new Date().toISOString();
         this.saveFallback();
       }
+      this.scheduleSaveSeedData();
       return manga;
     }
   }
@@ -464,6 +530,7 @@ export class TrackerDatabase {
     if (this.isSqlite) {
       const stmt = this.db.prepare('UPDATE mangas SET status = ?, updated_at = ? WHERE id = ?');
       stmt.run(status, new Date().toISOString(), id.toString());
+      this.scheduleSaveSeedData();
       return this.getMangaById(id);
     } else {
       const manga = this.getMangaById(id);
@@ -472,6 +539,7 @@ export class TrackerDatabase {
         manga.updatedAt = new Date().toISOString();
         this.saveFallback();
       }
+      this.scheduleSaveSeedData();
       return manga;
     }
   }
@@ -603,6 +671,7 @@ export class TrackerDatabase {
         lastReadAt: timestamp,
       });
 
+      this.scheduleSaveSeedData();
       return {
         isDuplicate: false,
         event: this.getEventById(id),
@@ -638,6 +707,7 @@ export class TrackerDatabase {
       });
 
       this.saveFallback();
+      this.scheduleSaveSeedData();
       return { isDuplicate: false, event: newEvent };
     }
   }
